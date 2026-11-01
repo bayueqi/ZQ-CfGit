@@ -4,7 +4,6 @@ import {
   Refs,
   ZERO,
   LIMITS,
-  bytes,
   text,
   concat,
   checkRefs,

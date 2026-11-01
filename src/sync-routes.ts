@@ -1,6 +1,5 @@
 import { Hono, Context } from "hono";
 import type { App, Repo } from "./types";
-import { z } from "zod";
 import { fail, boundedBody } from "./security";
 import {
   upstreamSchema,

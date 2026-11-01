@@ -11,11 +11,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": [
-    "src/**/*.ts",
-    "sdk/**/*.ts",
-    "tests/**/*.ts",
-    "examples/**/*.ts",
-    "scripts/e2e-sdk-ts.ts"
-  ]
+  "include": ["src/**/*.ts"]
 }

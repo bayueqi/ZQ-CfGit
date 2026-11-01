@@ -632,10 +632,6 @@ textarea {
 .auth-form .field {
   margin: 22px 0;
 }
-.auth-footer {
-  font-size: 12px;
-  color: #838c9a;
-}
 .auth-form label {
   display: block;
   font-size: 14px;
@@ -768,9 +764,6 @@ button.text {
   font-size: 13px;
   padding: 0;
 }
-.mobile-brand {
-  display: none;
-}
 .auth-form a {
   display: inline-block;
   margin-top: 24px;
@@ -834,11 +827,6 @@ button.text {
     grid-column: 1 / -1;
     min-width: 0;
     overflow-x: auto;
-  }
-  .sidebar .space-switch {
-    min-width: 0;
-    margin: 0;
-    gap: 4px;
   }
   .navlink {
     padding: 7px;
@@ -942,8 +930,7 @@ button.text {
     margin: 28px 0 12px;
   }
   .auth-story p,
-  .auth-story .lines,
-  .auth-footer {
+  .auth-story .lines {
     display: none;
   }
   .auth-form {
@@ -1071,21 +1058,6 @@ button.text {
     animation: none;
   }
 }
-.space-switch {
-  margin: 0 20px 20px;
-  display: grid;
-  gap: 8px;
-  font-size: 12px;
-  color: #9ea8b7;
-}
-.space-switch select {
-  max-width: 100%;
-  background: #252b36;
-  border: 1px solid #3b4351;
-  border-radius: 6px;
-  color: #f4f6fa;
-  padding: 9px;
-}
 .code-viewer {
   display: flex;
   overflow: auto;
@@ -1175,25 +1147,11 @@ button.text {
   background: #e5e7eb;
   color: #4b5563;
 }
-.audit-list article {
-  padding: 18px;
-  border-bottom: 1px solid #e4e8ee;
-}
-.audit-list pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
 .code-input {
   font:
     13px/1.6 ui-monospace,
     monospace;
   min-height: 300px;
-}
-
-.prose {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font: inherit;
 }
 
 .markdown {

@@ -210,7 +210,7 @@ function primeRoute() {
     );
   } else if (
     parts.length >= 2 &&
-    !["settings", "admin", "spaces"].includes(parts[0])
+    !["settings", "admin"].includes(parts[0])
   ) {
     const ap = "/repos/" + parts[0] + "/" + parts[1];
     reads.push(ap);
@@ -242,7 +242,7 @@ function primeRoute() {
             new URLSearchParams(location.search).get("comments_after"),
           ),
       );
-    } else if (["commits", "members", "issues", "merges"].includes(parts[2]))
+    } else if (["commits", "issues", "merges"].includes(parts[2]))
       reads.push(ap + "/" + parts[2] + (parts[3] ? "/" + parts[3] : ""));
   }
   // Attach rejection handlers immediately; the page awaits the same in-flight reads.
@@ -379,11 +379,11 @@ function repoLayout(r, tab, content, actions = "") {
       ["packages", i18nText("包仓库"), "/packages"],
       ["forge", i18nText("Git 工具"), "/forge"],
       ["search", i18nText("搜索"), "/search"],
-      ["issues", "Issues", "/issues"],
+      ["issues", i18nText("议题"), "/issues"],
       ["merges", i18nText("合并请求"), "/merges"],
       ["planning", i18nText("规划"), "/planning"],
       ["releases", i18nText("版本"), "/releases"],
-      ["wiki", "Wiki", "/wiki"],
+      ["wiki", i18nText("维基"), "/wiki"],
       ["deployments", i18nText("应用发布"), "/deployments"],
       ["protect", i18nText("分支保护"), "/protect"],
       ...(["owner", "maintainer"].includes(r.role)
@@ -799,9 +799,8 @@ async function render() {
     commits: i18nText("提交"),
     forge: i18nText("Git 工具"),
     upstream: i18nText("同步与 Fork"),
-    issues: "Issues",
+    issues: i18nText("议题"),
     merges: i18nText("合并请求"),
-    members: i18nText("成员"),
     settings: i18nText("设置"),
     "deploy-tokens": i18nText("部署令牌"),
     packages: i18nText("包仓库"),

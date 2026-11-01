@@ -1,7 +1,7 @@
 import { RE2JS } from "re2js";
 import { fail } from "../security";
 import { base64, unbase64 } from "./signatures";
-import { bytes, text, concat, TreeEntry } from "./objects";
+import { bytes, text, concat } from "./objects";
 export interface PageOptions {
   cursor?: string;
   limit?: number | string;

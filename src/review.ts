@@ -1,4 +1,4 @@
-import type { Env, Repo, User } from "./types";
+import type { Env, Repo } from "./types";
 import { repositoryRole, roleRank } from "./access";
 import { fail } from "./security";
 import { ObjectStore, type Refs } from "./git/objects";

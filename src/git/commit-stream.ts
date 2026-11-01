@@ -1,4 +1,4 @@
-import { ObjectStore, bytes, text, concat, LIMITS } from "./objects";
+import { ObjectStore, bytes, concat, LIMITS } from "./objects";
 import { fail } from "../security";
 import { unbase64 } from "./signatures";
 import type { CommitInput, FileEdit } from "./forge";

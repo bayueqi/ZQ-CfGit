@@ -219,7 +219,6 @@ export async function validateQueuePublication(
   metadata: Repo,
   repo: ForgeRepository,
   e: QueueEntry,
-  mr: any,
 ) {
   const current = await env.DB.prepare(
     `SELECT q.* FROM merge_queue q JOIN users u ON u.id=q.actor_id JOIN repositories r ON r.id=q.repo_id
@@ -473,7 +472,7 @@ export async function advanceQueue(
     )
       .bind(e.id)
       .run();
-    mr = await validateQueuePublication(env, metadata, repo, e, mr);
+    mr = await validateQueuePublication(env, metadata, repo, e);
     await publish(e, mr);
   } catch (error) {
     if (

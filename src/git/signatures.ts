@@ -1,5 +1,5 @@
 import { createMessage, readKey, readSignature, verify } from "openpgp";
-import { bytes, concat, text, sameBytes, GitObject, toHex } from "./objects";
+import { bytes, concat, text, sameBytes, GitObject } from "./objects";
 import { fail } from "../security";
 import { base64 } from "../base64";
 export { base64 } from "../base64";

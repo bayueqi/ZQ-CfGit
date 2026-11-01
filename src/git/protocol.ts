@@ -4,11 +4,9 @@ import { reportGitFailure } from "./diagnostics";
 import { fail } from "../security";
 import { GitRepository } from "./repository";
 import {
-  bytes,
   text,
   concat,
   ZERO,
-  Refs,
   parseTag,
   LIMITS,
   isOid,

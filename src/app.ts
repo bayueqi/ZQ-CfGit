@@ -77,11 +77,6 @@ async function input<T>(c: Context<App>, schema: z.ZodType<T>): Promise<T> {
 }
 const requireUser = (c: Context<App>) =>
   c.get("user") || fail(401, "Sign in required");
-const requireAdmin = (c: Context<App>) => {
-  const u = requireUser(c);
-  if (!u.admin) fail(403, "Administrator required");
-  return u;
-};
 async function audit(
   c: Context<App>,
   action: string,
@@ -363,8 +358,6 @@ const staticPaths = new Set([
   "/logo.png",
   "/favicon.png",
   "/apple-touch-icon.png",
-  "/openapi.json",
-  "/source.tar.gz",
 ]);
 app.get("*", async (c, next) => {
   const canonical = canonicalPageURL(
@@ -856,8 +849,6 @@ app.post("/api/repos", async (c) => {
     }),
   );
   const namespace = b.namespace || u.username;
-  const workspace =
-    null;
   const id = crypto.randomUUID();
   b.name = b.name || b.id || id;
   requireScope(c.get("delegation"), "repo:write", `${namespace}/${b.name}`);
@@ -1365,7 +1356,6 @@ app.all("/:namespace/:git/*", async (c, next) => {
   }
   const lfs = suffix.match(/^info\/lfs\/objects\/([0-9a-f]{64})$/);
   if (lfs) {
-    const key = `lfs/${r.id}/${lfs[1]}`;
     if (c.req.method === "GET")
       return engine(
         c,
@@ -1421,12 +1411,10 @@ app.get("*", async (c) => {
   if (
     url.pathname === "/app.js" ||
     url.pathname === "/forge.js" ||
-    url.pathname === "/openapi.json" ||
     url.pathname === "/style.css" ||
     url.pathname === "/favicon.png" ||
     url.pathname === "/logo.png" ||
-    url.pathname === "/apple-touch-icon.png" ||
-    url.pathname === "/source.tar.gz"
+    url.pathname === "/apple-touch-icon.png"
   )
     return c.env.ASSETS.fetch(c.req.raw);
   url.pathname = "/index.html";

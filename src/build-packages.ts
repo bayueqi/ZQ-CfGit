@@ -7,8 +7,7 @@ import { BUILD_LIMIT } from "./ci-build-schema";
 import { decodeBase64 } from "./base64";
 import type { PublicPackageCache } from "./build-package-cache";
 
-const encoder = new TextEncoder(),
-  decoder = new TextDecoder("utf-8", { fatal: true });
+const decoder = new TextDecoder("utf-8", { fatal: true });
 const packageName = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
 export { normalizePath } from "./build-path";
 export function lockPackages(

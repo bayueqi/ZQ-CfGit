@@ -1,6 +1,6 @@
 import { applyPatch, parsePatch } from "diff";
 import { ForgeRepository, CommitInput, FileEdit } from "./forge";
-import { bytes, text, concat, TreeEntry, ZERO } from "./objects";
+import { bytes, text, concat } from "./objects";
 import { fail } from "../security";
 import { inflateMember, applyDelta } from "./pack";
 const alphabet =

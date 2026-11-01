@@ -2,7 +2,7 @@ import { githubLFS, uploadLFS, downloadLFS } from "./lfs-sync";
 import { upstreamURL, upstreamSchema } from "./sync-config";
 import type { Env, Repo } from "./types";
 import { fail, branch, boundedBody, digest } from "./security";
-import { ObjectStore, Refs, canonical, checkRefs, text } from "./git/objects";
+import { ObjectStore, Refs, checkRefs, text } from "./git/objects";
 import type { ForgeRepository } from "./git/forge";
 /** Replay the authoritative DO branch after a failed D1 projection. Caller holds the writer gate. */
 export async function projectDefaultBranch(

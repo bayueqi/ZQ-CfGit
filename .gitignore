@@ -9,15 +9,11 @@ dist/
 *.log
 .DS_Store
 coverage/
-public/source.tar.gz
 __pycache__/
 *.pyc
 *.egg-info/
 
-/public/docs/
-
 # Local documentation, operational state and credentials
-/docs/
 /output/
 *.production.jsonc
 *.pem

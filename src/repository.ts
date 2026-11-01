@@ -56,7 +56,7 @@ import {
 } from "./git/receipts";
 import type { Env } from "./types";
 import { boundedBody, fail, branch, slug, repoName } from "./security";
-import { ObjectStore, Refs, LIMITS, text } from "./git/objects";
+import { ObjectStore, Refs, text } from "./git/objects";
 import { namespaceRepositories } from "./git/namespaces";
 import { normalizePolicies } from "./delegation";
 import { parseCommitStream } from "./git/commit-stream";
@@ -614,7 +614,6 @@ export class Repository extends DurableObject<Env> {
               metadata,
               select(false),
               reviewedMerge.queue_entry,
-              reviewedMerge,
             );
           if (!ephemeral && metadata)
             await protectRefs(
@@ -1091,8 +1090,7 @@ export class Repository extends DurableObject<Env> {
       return response;
     }
     if (request.method === "GET") {
-      const ref = url.searchParams.get("ref") || "HEAD",
-        file = url.searchParams.get("path") || "";
+      const ref = url.searchParams.get("ref") || "HEAD";
       switch (path) {
         case "/search":
           return Response.json(

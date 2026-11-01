@@ -6,7 +6,7 @@ import { upstreamURL, upstreamSchema, genericHeaders } from "./sync-config";
 import { githubHeaders } from "./github";
 import { fail } from "./security";
 import { EPHEMERAL } from "./git/namespaces";
-import { forgeEvent, dispatchEvent } from "./events";
+import { forgeEvent } from "./events";
 export async function upstreamClient(
   env: Env,
   repo: Repo,

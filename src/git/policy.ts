@@ -1,6 +1,6 @@
 import { fail } from "../security";
 import { RefPolicy, refOperations } from "../delegation";
-import { ObjectStore, Refs, parseCommit, ZERO, LIMITS } from "./objects";
+import { ObjectStore, Refs, parseCommit, LIMITS } from "./objects";
 import { verifyCommitSignature } from "./signatures";
 export interface WritePolicy {
   rules: RefPolicy[];

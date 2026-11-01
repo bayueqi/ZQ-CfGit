@@ -6,16 +6,11 @@ import { diff3Merge } from "node-diff3";
 import { RE2JS } from "re2js";
 import { GitRepository } from "./repository";
 import {
-  ObjectStore,
-  Refs,
   TreeEntry,
-  GitObject,
   bytes,
   text,
-  concat,
   parseCommit,
   parseTag,
-  parseTree,
   treeBytes,
   isOid,
   ZERO,
@@ -1234,7 +1229,6 @@ export class ForgeRepository extends GitRepository {
         }
         if (!old || old.type !== "blob") continue;
         const previous = await annotate(parent, parentPath),
-          previousText = previous.map((l) => l.content + "\n").join(""),
           oldData = text((await this.store.get(old.sha)).data),
           changes = diffLines(oldData, text(data), {
             timeout: 500,

@@ -5,7 +5,6 @@ import {
   ObjectStore,
   LIMITS,
   bytes,
-  text,
   parseCommit,
   parseTree,
 } from "./git/objects";
