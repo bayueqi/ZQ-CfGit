@@ -11,7 +11,6 @@ export const text = (source) => translateLiteral(source, locale);
 export const errorText = (source) => translateError(source, locale);
 export const html = (strings, ...values) =>
   translateTemplate(strings, values, locale);
-export const languageControl = () => "";
 const stateNames = {
   open: "开放",
   closed: "已关闭",

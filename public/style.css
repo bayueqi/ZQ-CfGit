@@ -1542,17 +1542,6 @@ button.text {
   }
 }
 
-.language-control select {
-  width: auto;
-  min-width: 100px;
-  padding: 6px 10px;
-  font-size: 13px;
-}
-.auth-language {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 20px;
-}
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1570,9 +1559,6 @@ html[lang="en"] .sidebar {
 @media (max-width: 600px) {
   .topbar .pill {
     display: none;
-  }
-  .language-control select {
-    min-width: 85px;
   }
 }
 

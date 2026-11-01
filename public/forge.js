@@ -2,7 +2,7 @@ import {
   text as i18nText,
   html as i18nHTML,
   getLocale,
-} from "./i18n.js?v=cc932df8f838287d";
+} from "./i18n.js?v=861fedff0fbe629d";
 export async function keyPage(h) {
   const { api, layout, esc, field, textarea, bindForm, notice, render } = h;
   const [{ keys: apiKeys }, { keys: signing }, github] = await Promise.all([

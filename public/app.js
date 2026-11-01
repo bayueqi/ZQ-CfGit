@@ -2,22 +2,21 @@ import {
   text as i18nText,
   html as i18nHTML,
   getLocale,
-  languageControl,
   errorText,
   relativeTime,
   state as i18nState,
-} from "./i18n.js?v=cc932df8f838287d";
-const globalSearch = () => import("./search.js?v=4437732f7d74e539");
-const deployTokens = () => import("./deploy-tokens.js?v=1ff2f2425f45696b");
-const packages = () => import("./packages.js?v=04f16fc622c41377");
-const account = () => import("./account.js?v=50a0d0da6b3260e2");
-const collaboration = () => import("./collaboration.js?v=187576eb6f526952");
-const platform = () => import("./manage.js?v=014f4c61e2f35403");
+} from "./i18n.js?v=861fedff0fbe629d";
+const globalSearch = () => import("./search.js?v=9623a7d6010400b9");
+const deployTokens = () => import("./deploy-tokens.js?v=ffc70a983e3c8674");
+const packages = () => import("./packages.js?v=39d2f4cf95b68ddf");
+const account = () => import("./account.js?v=c215388e790be2d2");
+const collaboration = () => import("./collaboration.js?v=f2267e06f97b221f");
+const platform = () => import("./manage.js?v=8e4e440c5264441d");
 import {
   keyPage,
   forgePage,
   upstreamPage,
-} from "./forge.js?v=b4c5c65697cafd41";
+} from "./forge.js?v=4eac4f55be283821";
 const root = document.querySelector("#app");
 const esc = (x) =>
   String(x ?? "").replace(
@@ -278,7 +277,7 @@ window.addEventListener("popstate", render);
 const link = (path, label, cls = "") =>
   `<a data-link href="${esc(path === "/" && user && selectedSpace ? "/?namespace=" + encodeURIComponent(selectedSpace) : path)}" class="${cls}">${label}</a>`;
 function layout(content, crumb = i18nText("项目"), active = "repos") {
-  root.innerHTML = i18nHTML`<div class="layout"><aside class="sidebar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="workspace"><span class="avatar">${esc(user?.username[0].toUpperCase() || "Z")}</span><div>${esc(user?.username || "ZQ-CfGit")}</div></div><div class="eyebrow">项目</div><nav>${link("/search" + (selectedSpace ? "?namespace=" + encodeURIComponent(selectedSpace) : ""), icon("code") + i18nText("跨项目搜索"), `navlink ${active === "search" ? "active" : ""}`)}${link("/", icon("repo") + i18nText("项目"), `navlink ${active === "repos" ? "active" : ""}`)}${user ? link("/settings/tokens", icon("key") + i18nText("访问令牌"), `navlink ${active === "tokens" ? "active" : ""}`) : ""}${user ? link("/settings/keys", icon("key") + i18nText("密钥与连接"), `navlink ${active === "keys" ? "active" : ""}`) : ""}${user ? link("/settings/account", icon("key") + i18nText("账户安全"), "navlink") + link("/settings/profile", icon("users") + i18nText("个人资料"), "navlink") : ""}${user ? link("/notifications", icon("repo") + i18nText("通知"), "navlink") : ""}</nav><footer>ZQ-CfGit</footer></aside><main class="main"><header class="topbar"><div class="breadcrumb">${link("/", i18nText("项目"))}<span>/</span><span>${crumb}</span></div><div class="right">${languageControl()}<span class="pill">自托管</span>${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main></div>`;
+  root.innerHTML = i18nHTML`<div class="layout"><aside class="sidebar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="workspace"><span class="avatar">${esc(user?.username[0].toUpperCase() || "Z")}</span><div>${esc(user?.username || "ZQ-CfGit")}</div></div><div class="eyebrow">项目</div><nav>${link("/search" + (selectedSpace ? "?namespace=" + encodeURIComponent(selectedSpace) : ""), icon("code") + i18nText("跨项目搜索"), `navlink ${active === "search" ? "active" : ""}`)}${link("/", icon("repo") + i18nText("项目"), `navlink ${active === "repos" ? "active" : ""}`)}${user ? link("/settings/tokens", icon("key") + i18nText("访问令牌"), `navlink ${active === "tokens" ? "active" : ""}`) : ""}${user ? link("/settings/keys", icon("key") + i18nText("密钥与连接"), `navlink ${active === "keys" ? "active" : ""}`) : ""}${user ? link("/settings/account", icon("key") + i18nText("账户安全"), "navlink") + link("/settings/profile", icon("users") + i18nText("个人资料"), "navlink") : ""}${user ? link("/notifications", icon("repo") + i18nText("通知"), "navlink") : ""}</nav><footer>ZQ-CfGit</footer></aside><main class="main"><header class="topbar"><div class="breadcrumb">${link("/", i18nText("项目"))}<span>/</span><span>${crumb}</span></div><div class="right"><span class="pill">自托管</span>${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main></div>`;
   document.querySelector("#logout")?.addEventListener("click", async () => {
     await api("/logout", { method: "POST" });
     user = null;
@@ -319,7 +318,7 @@ const textarea = (label, name, value = "", cls = "") =>
   `<div class="field"><label for="${name}">${label}</label><textarea name="${name}" id="${name}" class="${cls}">${esc(value)}</textarea></div>`;
 function authPage() {
   const initializing = setup;
-  root.innerHTML = i18nHTML`<main class="auth"><section class="auth-story"><a href="/" class="brand" data-link><img src="/logo.png" alt="">ZQ-CfGit</a><div><h1>代码的归属，<br><span>由你定义。</span></h1><p>从第一个 commit 到下一次合并。把仓库、讨论与协作，留在自己的空间。</p><div class="lines">$ git add .<br>$ git commit -m "a new beginning"<br>$ git push origin main</div></div></div></section><section class="auth-form"><div class="auth-language">${languageControl()}</div><form id="login-form"><h2>${initializing ? i18nText("初始化") : i18nText("欢迎回来")}</h2><p class="muted">${initializing ? i18nText("使用部署时配置的初始化密钥创建管理员。") : i18nText("登录 ZQ-CfGit，继续你的下一个想法。")}</p>${initializing ? field(i18nText("初始化密钥"), "secret", "password") : ""}${field(i18nText("用户名"), "username")}${field(i18nText("密码"), "password", "password", "", i18nText("至少 12 个字符"))}${!initializing ? i18nText('<div class="field"><label>双重验证（已启用时填写）<input name="otp" maxlength="64" autocomplete="one-time-code" placeholder="验证码或恢复码"></label></div>') : ""}<button type="submit" class="btn primary">${initializing ? i18nText("初始化 ZQ-CfGit") : i18nText("登录")} →</button>${!initializing ? link("/login/recover", i18nText("忘记密码？")) + link("/", i18nText("浏览公开项目 →")) : ""}</form></section></main>`;
+  root.innerHTML = i18nHTML`<main class="auth"><section class="auth-story"><a href="/" class="brand" data-link><img src="/logo.png" alt="">ZQ-CfGit</a><div><h1>代码的归属，<br><span>由你定义。</span></h1><p>从第一个 commit 到下一次合并。把仓库、讨论与协作，留在自己的空间。</p><div class="lines">$ git add .<br>$ git commit -m "a new beginning"<br>$ git push origin main</div></div></div></section><section class="auth-form"><form id="login-form"><h2>${initializing ? i18nText("初始化") : i18nText("欢迎回来")}</h2><p class="muted">${initializing ? i18nText("使用部署时配置的初始化密钥创建管理员。") : i18nText("登录 ZQ-CfGit，继续你的下一个想法。")}</p>${initializing ? field(i18nText("初始化密钥"), "secret", "password") : ""}${field(i18nText("用户名"), "username")}${field(i18nText("密码"), "password", "password", "", i18nText("至少 12 个字符"))}${!initializing ? i18nText('<div class="field"><label>双重验证（已启用时填写）<input name="otp" maxlength="64" autocomplete="one-time-code" placeholder="验证码或恢复码"></label></div>') : ""}<button type="submit" class="btn primary">${initializing ? i18nText("初始化 ZQ-CfGit") : i18nText("登录")} →</button>${!initializing ? link("/login/recover", i18nText("忘记密码？")) + link("/", i18nText("浏览公开项目 →")) : ""}</form></section></main>`;
   bindForm("#login-form", async (data) => {
     if (initializing) {
       await api("/setup", { method: "POST", body: data });
@@ -475,7 +474,7 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
   if (notebook) {
     try {
       const { mountNotebook } =
-        await import("./notebook.js?v=a63865626b900f18");
+        await import("./notebook.js?v=5f71e4f16d3aa580");
       if (version !== routeVersion || !notebook.isConnected) return;
       mountNotebook(notebook, data.content, { base, ref: data.ref, path: p });
     } catch {
@@ -553,7 +552,7 @@ async function searchPage(r, base, ap, version) {
     "search",
     i18nHTML`<section class="panel" id="code-index-status"></section><form class="toolbar" id="code-search"><div class="search"><input name="q" value="${esc(q)}" required maxlength="128" placeholder="在默认分支搜索代码…" aria-label="搜索代码"></div><button class="btn primary" type="submit">搜索代码</button></form><div class="panel"><div class="panelhead"><strong>${result.matches.length} 处匹配</strong><span class="muted">${esc(r.default_branch)}${result.truncated ? i18nText(" · 仅显示前 200 条") : ""}</span></div>${result.matches.map((m) => `<div class="comment">${link(base + "?view=blob&path=" + encodeURIComponent(m.path), esc(m.path) + ":" + m.line)}<pre>${esc(m.text)}</pre></div>`).join("") || '<div class="empty"><p>' + (q ? i18nText("没有匹配的代码。") : i18nText("输入关键词，搜索仓库中的文本文件。")) + "</p></div>"}</div>`,
   );
-  const indexUI = await import("./search.js?v=4437732f7d74e539");
+  const indexUI = await import("./search.js?v=9623a7d6010400b9");
   if (version !== routeVersion) return;
   indexUI.mountCodeIndex(document.querySelector("#code-index-status"), r, ap, {
     api,
@@ -658,7 +657,7 @@ async function issuesPage(r, base, ap, sub, version, helpers) {
     });
     return i;
   }
-  return (await import("./issues.js?v=3bad5eb35b756c85")).issuesPage(
+  return (await import("./issues.js?v=0fe66c3eb4fbc172")).issuesPage(
     r,
     base,
     ap,
