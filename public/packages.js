@@ -2,7 +2,7 @@ import {
   text as i18nText,
   html as i18nHTML,
   getLocale,
-} from "./i18n.js?v=861fedff0fbe629d";
+} from "./i18n.js?v=362799ab65ad23c5";
 export async function packagePage(r, base, ap, h, id) {
   const { api, esc, repoLayout, current, render, go, notice } = h;
   const writable =

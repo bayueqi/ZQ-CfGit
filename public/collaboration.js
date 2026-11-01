@@ -3,7 +3,7 @@ import {
   html as i18nHTML,
   getLocale,
   state as i18nState,
-} from "./i18n.js?v=861fedff0fbe629d";
+} from "./i18n.js?v=362799ab65ad23c5";
 const button = (text, action, id = "") =>
   `<button type="button" class="btn small" data-collab="${action}" data-id="${id}">${text}</button>`;
 function actions(h, fn) {
@@ -284,42 +284,23 @@ export async function issuePlanning(r, ap, h, issue) {
     render();
   });
 }
-export async function notificationsPage(h) {
-  const { api, layout, esc, render } = h,
-    { notifications: n } = await api("/notifications");
-  if (!h.current()) return;
-  layout(
-    i18nHTML`<div class="titlebar"><h1>通知</h1>${n.length ? button(i18nText("全部标为已读"), "read") : ""}</div><div class="panel">${n.map((x) => `<div class="token-row"><div><a data-link href="/${esc(x.namespace)}/${esc(x.name)}">${esc(x.namespace)}/${esc(x.name)}</a><p>${esc(x.action)} · ${esc(x.detail)}</p></div><span>${x.read ? i18nText("已读") : i18nText("未读")}</span></div>`).join("") || i18nText('<div class="empty">关注项目后，在这里查看协作更新。</div>')}</div>`,
-    i18nText("通知"),
-  );
-  actions(h, async () => {
-    await api("/notifications/read", {
-      method: "POST",
-      body: { through_id: n[0].id },
-    });
-    render();
-  });
-}
-
 export async function social(r, ap, h) {
   if (!h.user) return;
   const d = await h.api(ap + "/social");
   if (!h.current()) return;
   const el = document.createElement("div");
   el.className = "toolbar";
-  el.innerHTML =
-    button(
-      (d.starred ? i18nText("★ 已收藏") : i18nText("☆ 收藏")) + " " + d.stars,
-      "star",
-    ) +
-    button(d.watching ? i18nText("正在关注") : i18nText("关注项目"), "watch");
+  el.innerHTML = button(
+    (d.starred ? i18nText("★ 已收藏") : i18nText("☆ 收藏")) + " " + d.stars,
+    "star",
+  );
   document.querySelector(".content > .titlebar")?.append(el);
   el.querySelectorAll("[data-collab]").forEach(
     (b) =>
       (b.onclick = async () => {
         try {
-          const on = b.dataset.collab === "star" ? d.starred : d.watching;
-          await h.api(ap + "/" + b.dataset.collab, {
+          const on = d.starred;
+          await h.api(ap + "/star", {
             method: on ? "DELETE" : "PUT",
           });
           h.render();

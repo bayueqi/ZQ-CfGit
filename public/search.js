@@ -2,7 +2,7 @@ import {
   text as i18nText,
   html as i18nHTML,
   getLocale,
-} from "./i18n.js?v=861fedff0fbe629d";
+} from "./i18n.js?v=362799ab65ad23c5";
 const labels = {
   all: i18nText("全部协作内容"),
   code: i18nText("代码"),

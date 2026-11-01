@@ -838,72 +838,35 @@ function registerCommunity(
     await h.audit(c, "wiki.update", r.id, page);
     return c.json(result);
   });
-  for (const kind of ["star", "watch"] as const) {
-    const table = kind === "star" ? "repository_stars" : "repository_watches";
-    app.put(base + "/" + kind, async (c) => {
-      const r = await access(c),
-        u = identity(c);
-      await c.env.DB.prepare(`INSERT OR IGNORE INTO ${table} VALUES(?,?)`)
-        .bind(r.id, u.id)
-        .run();
-      return c.json({ ok: true });
-    });
-    app.delete(base + "/" + kind, async (c) => {
-      const r = await access(c),
-        u = identity(c);
-      await c.env.DB.prepare(
-        `DELETE FROM ${table} WHERE repo_id=? AND user_id=?`,
-      )
-        .bind(r.id, u.id)
-        .run();
-      return c.json({ ok: true });
-    });
-  }
+  app.put(base + "/star", async (c) => {
+    const r = await access(c),
+      u = identity(c);
+    await c.env.DB.prepare(
+      "INSERT OR IGNORE INTO repository_stars VALUES(?,?)",
+    )
+      .bind(r.id, u.id)
+      .run();
+    return c.json({ ok: true });
+  });
+  app.delete(base + "/star", async (c) => {
+    const r = await access(c),
+      u = identity(c);
+    await c.env.DB.prepare(
+      "DELETE FROM repository_stars WHERE repo_id=? AND user_id=?",
+    )
+      .bind(r.id, u.id)
+      .run();
+    return c.json({ ok: true });
+  });
   app.get(base + "/social", async (c) => {
     const r = await access(c),
       u = c.get("user");
     return c.json(
       await c.env.DB.prepare(
-        "SELECT (SELECT count(*) FROM repository_stars WHERE repo_id=?) AS stars,EXISTS(SELECT 1 FROM repository_stars WHERE repo_id=? AND user_id=?) AS starred,EXISTS(SELECT 1 FROM repository_watches WHERE repo_id=? AND user_id=?) AS watching",
+        "SELECT (SELECT count(*) FROM repository_stars WHERE repo_id=?) AS stars,EXISTS(SELECT 1 FROM repository_stars WHERE repo_id=? AND user_id=?) AS starred",
       )
-        .bind(r.id, r.id, u?.id || "", r.id, u?.id || "")
+        .bind(r.id, r.id, u?.id || "")
         .first(),
     );
-  });
-  app.get("/api/notifications", async (c) => {
-    const u = identity(c),
-      rows = (
-        await c.env.DB.prepare(
-          "SELECT n.*,r.namespace,r.name,r.visibility,r.owner_id,r.workspace_id,r.id AS repository_id FROM notifications n JOIN repositories r ON r.id=n.repo_id WHERE n.user_id=? AND r.deleted_at IS NULL ORDER BY n.id DESC LIMIT 100",
-        )
-          .bind(u.id)
-          .all<any>()
-      ).results;
-    const visible = [];
-    for (const row of rows)
-      if (
-        row.visibility === "public" ||
-        roleRank[
-          await repositoryRole(
-            c.env,
-            { ...row, id: row.repository_id } as Repo,
-            u,
-          )
-        ] > 0
-      )
-        visible.push(row);
-    return c.json({ notifications: visible });
-  });
-  app.post("/api/notifications/read", async (c) => {
-    const u = identity(c),
-      b = z
-        .object({ through_id: z.number().int().positive() })
-        .parse(await jsonInput(c));
-    await c.env.DB.prepare(
-      "UPDATE notifications SET read=1 WHERE user_id=? AND id<=?",
-    )
-      .bind(u.id, b.through_id)
-      .run();
-    return c.json({ ok: true });
   });
 }

@@ -304,52 +304,10 @@ export function registerAccount(app: Hono<App>) {
     await record(c, "account.session.revoke");
     return c.json({ ok: true });
   });
-  app.get("/api/profile", async (c) => {
-    const u = session(c);
-    return c.json(
-      await c.env.DB.prepare(
-        "SELECT u.username,p.display_name,p.bio,p.location,p.website FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.id=?",
-      )
-        .bind(u.id)
-        .first(),
-    );
-  });
-  app.put("/api/profile", async (c) => {
-    const u = session(c),
-      b = z
-        .object({
-          display_name: z.string().trim().max(80).default(""),
-          bio: z.string().max(2000).default(""),
-          location: z.string().trim().max(100).default(""),
-          website: z
-            .string()
-            .max(1000)
-            .refine((s) => {
-              try {
-                return (
-                  !s ||
-                  (/^https?:\/\//.test(s) &&
-                    !new URL(s).username &&
-                    !new URL(s).password)
-                );
-              } catch {
-                return false;
-              }
-            }, "Use an HTTP(S) URL without credentials")
-            .default(""),
-        })
-        .parse(await jsonInput(c));
-    await c.env.DB.prepare(
-      "INSERT INTO user_profiles(user_id,display_name,bio,location,website) VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET display_name=excluded.display_name,bio=excluded.bio,location=excluded.location,website=excluded.website,updated_at=datetime('now')",
-    )
-      .bind(u.id, b.display_name, b.bio, b.location, b.website)
-      .run();
-    return c.json({ ok: true });
-  });
   app.get("/api/profiles/:username", async (c) => {
     if (c.get("delegation")) fail(403, "Git delegation cannot read profiles");
     const u = await c.env.DB.prepare(
-      "SELECT u.id,u.username,u.created_at,p.display_name,p.bio,p.location,p.website FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id WHERE u.username=? AND u.disabled=0",
+      "SELECT id,username,created_at FROM users WHERE username=? AND disabled=0",
     )
       .bind(c.req.param("username"))
       .first<User & Record<string, unknown>>();

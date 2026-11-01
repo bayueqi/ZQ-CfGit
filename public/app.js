@@ -5,18 +5,18 @@ import {
   errorText,
   relativeTime,
   state as i18nState,
-} from "./i18n.js?v=861fedff0fbe629d";
-const globalSearch = () => import("./search.js?v=9623a7d6010400b9");
-const deployTokens = () => import("./deploy-tokens.js?v=ffc70a983e3c8674");
-const packages = () => import("./packages.js?v=39d2f4cf95b68ddf");
-const account = () => import("./account.js?v=c215388e790be2d2");
-const collaboration = () => import("./collaboration.js?v=f2267e06f97b221f");
-const platform = () => import("./manage.js?v=8e4e440c5264441d");
+} from "./i18n.js?v=362799ab65ad23c5";
+const globalSearch = () => import("./search.js?v=8140a11f85cd8dbf");
+const deployTokens = () => import("./deploy-tokens.js?v=646791681d40b26a");
+const packages = () => import("./packages.js?v=77ff7bc32e2b6373");
+const account = () => import("./account.js?v=afa2e4b5cb0d8322");
+const collaboration = () => import("./collaboration.js?v=faab084f21902d50");
+const platform = () => import("./manage.js?v=ce43020e5f5900d9");
 import {
   keyPage,
   forgePage,
   upstreamPage,
-} from "./forge.js?v=4eac4f55be283821";
+} from "./forge.js?v=252705f2067f16c1";
 const root = document.querySelector("#app");
 const esc = (x) =>
   String(x ?? "").replace(
@@ -277,7 +277,7 @@ window.addEventListener("popstate", render);
 const link = (path, label, cls = "") =>
   `<a data-link href="${esc(path === "/" && user && selectedSpace ? "/?namespace=" + encodeURIComponent(selectedSpace) : path)}" class="${cls}">${label}</a>`;
 function layout(content, crumb = i18nText("项目"), active = "repos") {
-  root.innerHTML = i18nHTML`<div class="layout"><aside class="sidebar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="workspace"><span class="avatar">${esc(user?.username[0].toUpperCase() || "Z")}</span><div>${esc(user?.username || "ZQ-CfGit")}</div></div><div class="eyebrow">项目</div><nav>${link("/search" + (selectedSpace ? "?namespace=" + encodeURIComponent(selectedSpace) : ""), icon("code") + i18nText("跨项目搜索"), `navlink ${active === "search" ? "active" : ""}`)}${link("/", icon("repo") + i18nText("项目"), `navlink ${active === "repos" ? "active" : ""}`)}${user ? link("/settings/tokens", icon("key") + i18nText("访问令牌"), `navlink ${active === "tokens" ? "active" : ""}`) : ""}${user ? link("/settings/keys", icon("key") + i18nText("密钥与连接"), `navlink ${active === "keys" ? "active" : ""}`) : ""}${user ? link("/settings/account", icon("key") + i18nText("账户安全"), "navlink") + link("/settings/profile", icon("users") + i18nText("个人资料"), "navlink") : ""}${user ? link("/notifications", icon("repo") + i18nText("通知"), "navlink") : ""}</nav><footer>ZQ-CfGit</footer></aside><main class="main"><header class="topbar"><div class="breadcrumb">${link("/", i18nText("项目"))}<span>/</span><span>${crumb}</span></div><div class="right"><span class="pill">自托管</span>${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main></div>`;
+  root.innerHTML = i18nHTML`<div class="layout"><aside class="sidebar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="workspace"><span class="avatar">${esc(user?.username[0].toUpperCase() || "Z")}</span><div>${esc(user?.username || "ZQ-CfGit")}</div></div><div class="eyebrow">项目</div><nav>${link("/search" + (selectedSpace ? "?namespace=" + encodeURIComponent(selectedSpace) : ""), icon("code") + i18nText("跨项目搜索"), `navlink ${active === "search" ? "active" : ""}`)}${link("/", icon("repo") + i18nText("项目"), `navlink ${active === "repos" ? "active" : ""}`)}${user ? link("/settings/tokens", icon("key") + i18nText("访问令牌"), `navlink ${active === "tokens" ? "active" : ""}`) : ""}${user ? link("/settings/keys", icon("key") + i18nText("密钥与连接"), `navlink ${active === "keys" ? "active" : ""}`) : ""}${user ? link("/settings/account", icon("key") + i18nText("账户安全"), "navlink") + link("/profile", icon("users") + i18nText("我的动态"), "navlink") : ""}</nav><footer>ZQ-CfGit</footer></aside><main class="main"><header class="topbar"><div class="breadcrumb">${link("/", i18nText("项目"))}<span>/</span><span>${crumb}</span></div><div class="right"><span class="pill">自托管</span>${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main></div>`;
   document.querySelector("#logout")?.addEventListener("click", async () => {
     await api("/logout", { method: "POST" });
     user = null;
@@ -474,7 +474,7 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
   if (notebook) {
     try {
       const { mountNotebook } =
-        await import("./notebook.js?v=5f71e4f16d3aa580");
+        await import("./notebook.js?v=1e7462636460da7d");
       if (version !== routeVersion || !notebook.isConnected) return;
       mountNotebook(notebook, data.content, { base, ref: data.ref, path: p });
     } catch {
@@ -552,7 +552,7 @@ async function searchPage(r, base, ap, version) {
     "search",
     i18nHTML`<section class="panel" id="code-index-status"></section><form class="toolbar" id="code-search"><div class="search"><input name="q" value="${esc(q)}" required maxlength="128" placeholder="在默认分支搜索代码…" aria-label="搜索代码"></div><button class="btn primary" type="submit">搜索代码</button></form><div class="panel"><div class="panelhead"><strong>${result.matches.length} 处匹配</strong><span class="muted">${esc(r.default_branch)}${result.truncated ? i18nText(" · 仅显示前 200 条") : ""}</span></div>${result.matches.map((m) => `<div class="comment">${link(base + "?view=blob&path=" + encodeURIComponent(m.path), esc(m.path) + ":" + m.line)}<pre>${esc(m.text)}</pre></div>`).join("") || '<div class="empty"><p>' + (q ? i18nText("没有匹配的代码。") : i18nText("输入关键词，搜索仓库中的文本文件。")) + "</p></div>"}</div>`,
   );
-  const indexUI = await import("./search.js?v=9623a7d6010400b9");
+  const indexUI = await import("./search.js?v=8140a11f85cd8dbf");
   if (version !== routeVersion) return;
   indexUI.mountCodeIndex(document.querySelector("#code-index-status"), r, ap, {
     api,
@@ -657,7 +657,7 @@ async function issuesPage(r, base, ap, sub, version, helpers) {
     });
     return i;
   }
-  return (await import("./issues.js?v=0fe66c3eb4fbc172")).issuesPage(
+  return (await import("./issues.js?v=aa0bcc55bd5b8987")).issuesPage(
     r,
     base,
     ap,
@@ -852,11 +852,6 @@ async function render() {
       await (await account()).securityPage(helpers);
       return;
     }
-    if (path === "/settings/profile") {
-      if (!user) return go("/login");
-      await (await account()).profileSettings(helpers);
-      return;
-    }
     if (path === "/profile") {
       await (
         await account()
@@ -866,10 +861,6 @@ async function render() {
           user?.username ||
           "",
       );
-      return;
-    }
-    if (path === "/notifications") {
-      await (await collaboration()).notificationsPage(helpers);
       return;
     }
     if (path === "/settings/keys") {

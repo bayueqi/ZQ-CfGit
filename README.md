@@ -9,7 +9,7 @@
 - 语义搜索：文字与向量混合检索，按行返回结果
 - 协作：Issue、看板、里程碑、合并请求、行级评论、CODEOWNERS、受保护分支
 - CI：推送或定时触发，变量与密钥、缓存与产物，云端构建 TS/TSX、JS/CSS
-- 其他：包仓库、Wiki、通知、Webhook、REST API、访问令牌、双重验证
+- 其他：包仓库、Wiki、Webhook、REST API、访问令牌、双重验证
 
 单用户部署，没有团队与多账号管理。
 
@@ -85,10 +85,10 @@ npx wrangler secret put CREDENTIAL_ENCRYPTION_KEY   # openssl rand -base64 32
 
 | 绑定 | 类型 | 指向 | 作用 |
 |---|---|---|---|
-| `DB` | D1 数据库 | `zq-cfgit` | 账号、仓库索引、Issue、合并请求、CI、包、通知等元数据 |
+| `DB` | D1 数据库 | `zq-cfgit` | 账号、仓库索引、Issue、合并请求、CI、包等元数据 |
 | `OBJECTS` | R2 桶 | `zq-cfgit-objects` | Git 对象、LFS 文件、附件、构建产物 |
 | `REPOSITORIES` | Durable Object | 类 `Repository`，每个仓库一个实例 | 串行化引用更新、暂存待发布的对象、保存每个仓库的引用表 |
-| `EVENTS` | Queue | `zq-cfgit-events` | Webhook 投递、通知、索引等后台任务；生产与消费是同一个队列，每 5 分钟由 Cron 兜底重试 |
+| `EVENTS` | Queue | `zq-cfgit-events` | Webhook 投递、索引等后台任务；生产与消费是同一个队列，每 5 分钟由 Cron 兜底重试 |
 | `BUILDER` | Service 绑定 | `zq-cfgit-build` | 云端 CI 构建：esbuild 编译、npm 依赖安装与缓存 |
 | `NPM_CACHE` | R2 桶 | `zq-cfgit-npm-cache` | 编译服务专用，缓存 npm 包与构建中间产物 |
 | `CODE_VECTORS` | Vectorize 索引 | `zq-cfgit-code` | 语义搜索的向量索引，1024 维、cosine，`repo` 字段作为元数据索引 |

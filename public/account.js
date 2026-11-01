@@ -2,7 +2,7 @@ import {
   text as i18nText,
   html as i18nHTML,
   getLocale,
-} from "./i18n.js?v=861fedff0fbe629d";
+} from "./i18n.js?v=362799ab65ad23c5";
 let hasPassword = true;
 const passwordInput = () =>
   hasPassword
@@ -155,23 +155,6 @@ export function recoverPasswordPage(h) {
     );
   });
 }
-export async function profileSettings(h) {
-  const { api, layout, esc, textarea, bindForm, render } = h,
-    p = await api("/profile");
-  if (!h.current()) return;
-  const optional = (label, name) =>
-    `<div class="field"><label>${label}<input name="${name}" value="${esc(p[name] || "")}"></label></div>`;
-  layout(
-    i18nHTML`<div class="titlebar"><h1>个人资料</h1><a class="btn" data-link href="/profile?user=${esc(p.username)}">查看资料页</a></div><form class="panel form" id="profile-form"><p>以下信息会出现在公开资料页。用户名用于 Git 地址，保持不变。</p>${optional(i18nText("显示名称"), "display_name")}${textarea(i18nText("简介（支持 Markdown）"), "bio", p.bio || "")}${optional(i18nText("所在地"), "location")}${optional(i18nText("个人网站"), "website")}<button class="btn primary" type="submit">保存资料</button></form>`,
-    i18nText("个人资料"),
-    "profile",
-  );
-  bindForm("#profile-form", async (b) => {
-    await api("/profile", { method: "PUT", body: b });
-    h.notice(i18nText("资料已保存"));
-    render();
-  });
-}
 export async function profilePage(h, name) {
   const { api, layout, esc } = h,
     q = new URLSearchParams(location.search),
@@ -185,8 +168,7 @@ export async function profilePage(h, name) {
   if (!h.current()) return;
   const p = d.profile;
   layout(
-    i18nHTML`<div class="titlebar"><div><h1>${esc(p.display_name || p.username)}</h1><p>@${esc(p.username)} ${esc(p.location || "")}</p>${p.website ? `<a href="${esc(p.website)}" target="_blank" rel="noopener noreferrer">${esc(p.website)}</a>` : ""}</div></div><div class="panel detail-body markdown" data-markdown>${esc(p.bio || i18nText("尚未填写简介。"))}</div><section class="panel"><div class="panelhead"><h2>项目</h2></div>${d.repositories.map((r) => `<div class="repo-row"><a data-link href="/${esc(r.namespace)}/${encodeURIComponent(r.name)}">${esc(r.name)}</a><p>${esc(r.description)}</p><span>${esc(r.visibility)}</span></div>`).join("") || i18nText('<div class="empty">暂无可见项目</div>')}</section><section class="panel"><div class="panelhead"><h2>活动</h2></div>${d.activity.map((a) => `<div class="token-row"><div><a data-link href="/${esc(a.namespace)}/${encodeURIComponent(a.name)}">${esc(a.namespace)}/${esc(a.name)}</a><p>${esc(a.action)} · ${esc(a.detail)}</p></div><span>${esc(a.created_at)}</span></div>`).join("") || i18nText('<div class="empty">暂无可见活动</div>')}${d.next ? i18nHTML`<a data-link class="btn" href="/profile?user=${esc(name)}&before=${d.next}">更早的活动</a>` : ""}</section>`,
-    i18nText("个人资料"),
+    i18nHTML`<div class="titlebar"><h1>${esc(p.username)}</h1></div><section class="panel"><div class="panelhead"><h2>项目</h2></div>${d.repositories.map((r) => `<div class="repo-row"><a data-link href="/${esc(r.namespace)}/${encodeURIComponent(r.name)}">${esc(r.name)}</a><p>${esc(r.description)}</p><span>${esc(r.visibility)}</span></div>`).join("") || i18nText('<div class="empty">暂无可见项目</div>')}</section><section class="panel"><div class="panelhead"><h2>活动</h2></div>${d.activity.map((a) => `<div class="token-row"><div><a data-link href="/${esc(a.namespace)}/${encodeURIComponent(a.name)}">${esc(a.namespace)}/${esc(a.name)}</a><p>${esc(a.action)} · ${esc(a.detail)}</p></div><span>${esc(a.created_at)}</span></div>`).join("") || i18nText('<div class="empty">暂无可见活动</div>')}${d.next ? i18nHTML`<a data-link class="btn" href="/profile?user=${esc(name)}&before=${d.next}">更早的活动</a>` : ""}</section>`,
+    i18nText("我的动态"),
   );
-  h.markdown().catch(() => {});
 }
