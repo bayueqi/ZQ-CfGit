@@ -1,0 +1,12 @@
+DROP TRIGGER IF EXISTS code_index_new_project;
+DROP TRIGGER IF EXISTS code_index_default_branch;
+DROP TABLE IF EXISTS code_postings;
+DROP TABLE IF EXISTS code_content_grams;
+DROP TABLE IF EXISTS code_documents;
+DROP TABLE IF EXISTS code_contents;
+DROP TABLE IF EXISTS code_index_state;
+DROP TABLE IF EXISTS semantic_chunks;
+DROP TABLE IF EXISTS semantic_state;
+DROP TABLE IF EXISTS semantic_usage;
+DROP TABLE IF EXISTS semantic_rate;
+DROP TABLE IF EXISTS semantic_settings;

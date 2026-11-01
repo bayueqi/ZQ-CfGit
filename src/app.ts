@@ -1,16 +1,6 @@
-import { registerSemanticRoutes } from "./semantic-routes";
 import { canonicalPageURL } from "./domain";
 import packageInfo from "../package.json" with { type: "json" };
-import { registerSearch } from "./search";
-import { registerPasswordRecovery } from "./password-recovery";
 import { confirmGitResponse } from "./git/confirmation";
-import { registerDeployTokenRoutes } from "./deploy-token-routes";
-import {
-  assertDeployAccess,
-  deployRequestAllowed,
-  resolveDeployToken,
-} from "./deploy-tokens";
-import { registerPackageRoutes } from "./package-routes";
 import { repositoryAt } from "./project-transfer";
 import { projectDatabase } from "./project-db";
 import { archivedApiWrite, archiveError } from "./project-state";
@@ -21,20 +11,12 @@ import {
 } from "./issue-workflows";
 import {
   registerAccount,
-  mfaState,
-  consumeFactor,
-  stepUp,
   passwordProof,
 } from "./account";
 import { registerCollaboration } from "./collaboration";
-import { registerCIRoutes } from "./ci";
 import { repositoryRole, roleRank } from "./access";
 import { base64, unbase64 } from "./git/signatures";
 import { registerMCP } from "./mcp";
-import { githubLFS } from "./lfs-sync";
-import { registerSyncRoutes } from "./sync-routes";
-import { upstreamSchema, upstreamURL } from "./sync-config";
-import { scheduleSync } from "./sync";
 import { registerForgeRoutes } from "./forge-routes";
 import { verifyDelegation, requireScope } from "./delegation";
 import { Hono, type Context } from "hono";
@@ -42,7 +24,6 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
 import { z, ZodError } from "zod";
 import type { App, Repo, User } from "./types";
-import { publishPending, webhookURL } from "./webhooks";
 import {
   slug,
   repoName,
@@ -88,33 +69,7 @@ async function audit(
       "INSERT INTO audit(repo_id,actor_id,action,detail) VALUES(?,?,?,?)",
     ).bind(repoId, c.get("user")?.id || null, action, detail),
   ];
-  if (repoId && !action.startsWith("git.")) {
-    const hooks = await c.env.DB.prepare(
-      "SELECT id,events FROM webhooks WHERE repo_id=? LIMIT 10",
-    )
-      .bind(repoId)
-      .all<{ id: string; events: string }>();
-    for (const hook of hooks.results) {
-      const selected = JSON.parse(hook.events);
-      if (!selected.includes("*") && !selected.includes(action)) continue;
-      const id = crypto.randomUUID();
-      const payload = JSON.stringify({
-        id,
-        event: action,
-        repository_id: repoId,
-        actor: c.get("user")?.username || null,
-        detail,
-        timestamp: new Date().toISOString(),
-      });
-      statements.push(
-        c.env.DB.prepare(
-          "INSERT INTO deliveries(id,webhook_id,payload) VALUES(?,?,?)",
-        ).bind(id, hook.id, payload),
-      );
-    }
-  }
   await c.env.DB.batch(statements);
-  if (c.env.EVENTS) c.executionCtx.waitUntil(publishPending(c.env));
 }
 async function repoAccess(
   c: Context<App>,
@@ -125,24 +80,10 @@ async function repoAccess(
   const located = await repositoryAt(c.env, namespace || "", name || "");
   if (!located) fail(404, "Repository not found");
   const { repo: r, moved } = located;
-  const deploy = c.get("deploy");
-  if (deploy)
-    await assertDeployAccess(
-      c.env,
-      r,
-      deploy,
-      level === "maintain"
-        ? "delete_package_registry"
-        : level === "write"
-          ? "write_package_registry"
-          : "read_package_registry",
-    );
   const delegated = c.get("delegation");
   if (delegated) {
     const operation = c.req.path.split("/").slice(5).join("/");
-    if (
-      /^(members|issues|merges|audit|webhooks|deliveries)(\/|$)/.test(operation)
-    )
+    if (/^(members|issues|merges|audit)(\/|$)/.test(operation))
       fail(403, "Delegated Git tokens cannot manage collaboration");
     requireScope(
       delegated,
@@ -155,13 +96,7 @@ async function repoAccess(
     );
   }
   const user = c.get("user");
-  const role = deploy
-    ? level === "maintain"
-      ? "maintainer"
-      : level === "write"
-        ? "developer"
-        : "reader"
-    : await repositoryRole(c.env, r, user);
+  const role = await repositoryRole(c.env, r, user);
   c.set("repoRole", role);
   if (moved) {
     if (r.visibility !== "public" && roleRank[role] < 1)
@@ -199,7 +134,7 @@ async function repoAccess(
     };
     return r;
   }
-  if (!user && !deploy) fail(401, "Authentication required");
+  if (!user) fail(401, "Authentication required");
   if (level === "read") fail(404, "Repository not found");
   if (c.get("scope") === "read") fail(403, "Read-only token");
   if (roleRank[role] >= (level === "maintain" ? 3 : 2)) {
@@ -220,23 +155,12 @@ async function engine(
     body?: BodyInit | null;
     headers?: HeadersInit;
     mutation?: boolean;
-    namespace?: "ephemeral" | "import";
+    namespace?: "ephemeral";
   } = {},
 ) {
   const headers = new Headers(options.headers);
   headers.delete("x-write-policy");
   headers.delete("x-namespace");
-  headers.delete("x-deploy-token");
-  const deploy = c.get("deploy");
-  if (deploy)
-    headers.set(
-      "x-deploy-token",
-      JSON.stringify({
-        id: deploy.id,
-        hash: deploy.hash,
-        revision: deploy.revision,
-      }),
-    );
   headers.set("x-repo-id", repo.id);
   headers.set("x-lifecycle-revision", String(repo.lifecycle_revision || 0));
   headers.set("x-default-branch", repo.default_branch);
@@ -244,10 +168,7 @@ async function engine(
   headers.set("x-actor-id", c.get("user")?.id || "");
   headers.set(
     "x-actor",
-    deploy?.username ||
-      c.get("delegation")?.subject ||
-      c.get("user")?.username ||
-      "",
+    c.get("delegation")?.subject || c.get("user")?.username || "",
   );
   const delegation = c.get("delegation");
   if (delegation)
@@ -312,7 +233,7 @@ app.onError((err, c) => {
     // browsers otherwise pause fetch while waiting for an HTTP auth dialog.
     if (
       err.status === 401 &&
-      !/^\/(api|mcp|webhooks)(\/|$)/.test(c.req.path) &&
+      !/^\/(api|mcp)(\/|$)/.test(c.req.path) &&
       /^\/[^/]+\/[^/]+\.git\//.test(c.req.path)
     )
       c.header("WWW-Authenticate", 'Basic realm="ZQ-CfGit", charset="UTF-8"');
@@ -339,20 +260,13 @@ app.use("*", async (c, next) => {
 });
 const staticPaths = new Set([
   "/i18n.js",
-  "/deploy-tokens.js",
-  "/packages.js",
   "/app.js",
-  "/search.js",
   "/forge.js",
-  "/manage.js",
-  "/ci-variables.js",
-  "/ci-cache.js",
   "/collaboration.js",
   "/issues.js",
   "/account.js",
   "/markdown.js",
   "/notebook.js",
-  "/qr.js",
   "/highlight.js",
   "/style.css",
   "/logo.png",
@@ -374,7 +288,7 @@ app.get("*", async (c, next) => {
     return c.text("Invalid URL encoding", 400);
   }
   if (
-    /^\/(api|mcp|webhooks)(\/|$)/.test(path) ||
+    /^\/(api|mcp)(\/|$)/.test(path) ||
     path === "/llms.txt" ||
     decodedPath.includes(".git")
   )
@@ -424,12 +338,11 @@ app.use("*", async (c, next) => {
   c.set("kind", null);
   c.set("credential", null);
   const authorization = c.req.header("authorization");
-  let token: string | undefined, basicUsername: string | undefined;
+  let token: string | undefined;
   if (authorization?.startsWith("Bearer ")) token = authorization.slice(7);
   else if (authorization?.startsWith("Basic ")) {
     try {
       const basic = atob(authorization.slice(6));
-      basicUsername = basic.slice(0, basic.indexOf(":"));
       token = basic.slice(basic.indexOf(":") + 1);
     } catch {
       fail(401, "Invalid credentials");
@@ -439,34 +352,7 @@ app.use("*", async (c, next) => {
     ? getCookie(c, "zq-cfgit_session")
     : undefined;
   token ||= cookie;
-  if (token?.startsWith("odt_") && authorization) {
-    const deploy = await resolveDeployToken(c.env, token, basicUsername);
-    c.set("deploy", deploy);
-    c.set("kind", "deploy");
-    c.set("credential", deploy.hash);
-    c.set(
-      "scope",
-      deploy.scopes.some(
-        (s) =>
-          s === "write_package_registry" || s === "delete_package_registry",
-      )
-        ? "write"
-        : "read",
-    );
-    if (!deployRequestAllowed(c.req.path))
-      fail(
-        403,
-        "Deploy tokens are limited to Git reads and scoped package operations",
-      );
-    if (!deploy.last_used_at || deploy.last_used_at < Date.now() - 3600000)
-      c.executionCtx.waitUntil(
-        c.env.DB.prepare(
-          "UPDATE deploy_tokens SET last_used_at=? WHERE id=? AND hash=? AND revision=? AND revoked_at IS NULL",
-        )
-          .bind(Date.now(), deploy.id, deploy.hash, deploy.revision)
-          .run(),
-      );
-  } else if (token?.split(".").length === 3 && authorization) {
+  if (token?.split(".").length === 3 && authorization) {
     const delegation = await verifyDelegation(c.env, token);
     c.set("delegation", delegation);
     c.set("user", delegation.user);
@@ -506,10 +392,7 @@ app.use("*", async (c, next) => {
     fail(403, "Read-only access token");
   await next();
 });
-registerSearch(app);
 registerAccount(app);
-registerPasswordRecovery(app);
-registerSemanticRoutes(app);
 registerMCP(app);
 app.get("/api/health", (c) =>
   c.json({ name: "ZQ-CfGit", version: packageInfo.version, status: "ok" }),
@@ -569,7 +452,6 @@ app.post("/api/login", async (c) => {
     z.object({
       username: z.string().min(1).max(48),
       password: z.string().max(128),
-      otp: z.string().max(64).default(""),
     }),
   );
   const now = Date.now(),
@@ -601,19 +483,6 @@ app.post("/api/login", async (c) => {
   );
   if (!user || user.disabled || !user.has_password || !valid)
     fail(401, "Invalid username or password");
-  const mfa = await mfaState(c.env, user.id);
-  if (mfa?.enabled) {
-    if (!b.otp)
-      return c.json(
-        {
-          error: "Authenticator or recovery code required",
-          mfa_required: true,
-        },
-        401,
-      );
-    if (!(await consumeFactor(c.env, user.id, b.otp, mfa.version)))
-      fail(401, "Invalid or already used verification code");
-  }
   const token = randomToken(),
     hash = await digest(token);
   const issued = await c.env.DB.prepare(
@@ -663,11 +532,9 @@ app.post("/api/password", async (c) => {
     z.object({
       current_password: z.string().max(128),
       new_password: z.string().min(12).max(128),
-      otp: z.string().max(64).default(""),
     }),
   );
   const stored = await passwordProof(c, b.current_password);
-  await stepUp(c, b.otp);
   const newHash = await passwordHash(b.new_password);
   const changed = await c.env.DB.batch([
     c.env.DB.prepare(
@@ -711,7 +578,6 @@ app.post("/api/tokens", async (c) => {
       name: z.string().trim().min(1).max(80),
       scope: z.enum(["read", "write"]).default("write"),
       days: z.number().int().min(1).max(365).default(90),
-      otp: z.string().max(64).default(""),
     }),
   );
   const snapshot = await c.env.DB.prepare(
@@ -720,7 +586,6 @@ app.post("/api/tokens", async (c) => {
     .bind(u.id)
     .first<{ auth_epoch: number }>();
   if (!snapshot) fail(401, "Sign in required");
-  await stepUp(c, b.otp);
   const token = randomToken(),
     id = crypto.randomUUID();
   const minted = await c.env.DB.prepare(
@@ -833,16 +698,6 @@ app.post("/api/repos", async (c) => {
       namespace: slug.optional(),
       name: repoName.optional(),
       id: repoName.optional(),
-      base_repo: z
-        .union([
-          z.object({
-            id: z.string().min(1).max(150),
-            ref: z.string().max(300).optional(),
-            sha: sha.optional(),
-          }),
-          upstreamSchema,
-        ])
-        .optional(),
       description: z.string().max(1000).default(""),
       visibility: z.enum(["public", "private"]).default("private"),
       default_branch: branch.optional(),
@@ -852,43 +707,10 @@ app.post("/api/repos", async (c) => {
   const id = crypto.randomUUID();
   b.name = b.name || b.id || id;
   requireScope(c.get("delegation"), "repo:write", `${namespace}/${b.name}`);
-  let source: Repo | null = null;
-  if (b.base_repo && "id" in b.base_repo) {
-    const key = b.base_repo.id;
-    source = await c.env.DB.prepare(
-      "SELECT * FROM repositories WHERE deleted_at IS NULL AND (id=? OR namespace||'/'||name=? OR (namespace=? AND name=?))",
-    )
-      .bind(key, key, namespace, key)
-      .first<Repo>();
-    if (
-      !source ||
-      (source.visibility !== "public" &&
-        roleRank[await repositoryRole(c.env, source, u)] < 1)
-    )
-      fail(404, "Fork source not found");
-    requireScope(c.get("delegation"), "git:read");
-    if (source.sync_status === "initializing")
-      fail(409, "Source is initializing");
-  }
-  const upstream =
-    b.base_repo && "provider" in b.base_repo ? b.base_repo : null;
-  if (upstream) {
-    upstreamURL(upstream, c.env.SYNC_ALLOWED_HOSTS);
-    upstream.mode =
-      upstream.provider === "github"
-        ? upstream.mode === "public"
-          ? "public"
-          : "app"
-        : "generic";
-  }
-  b.default_branch =
-    b.default_branch ||
-    source?.default_branch ||
-    upstream?.default_branch ||
-    "main";
+  b.default_branch = b.default_branch || "main";
   try {
     await c.env.DB.prepare(
-      "INSERT INTO repositories(id,owner_id,namespace,name,description,visibility,default_branch,fork_source,sync_status,base_repo,workspace_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO repositories(id,owner_id,namespace,name,description,visibility,default_branch,workspace_id) VALUES(?,?,?,?,?,?,?,?)",
     )
       .bind(
         id,
@@ -898,42 +720,12 @@ app.post("/api/repos", async (c) => {
         b.description,
         b.visibility,
         b.default_branch,
-        source?.id || null,
-        source ? "initializing" : "idle",
-        upstream ? JSON.stringify(upstream) : null,
         null,
       )
       .run();
   } catch {
     fail(409, "Repository name already exists");
   }
-  if (source) {
-    const target = {
-      id,
-      owner_id: u.id,
-      namespace,
-      name: b.name,
-      description: b.description,
-      visibility: b.visibility,
-      default_branch: b.default_branch,
-      created_at: new Date().toISOString(),
-    } as Repo;
-    try {
-      await engineJSON(c, target, "/internal/fork-initialize", {
-        source: source.id,
-        ref: (b.base_repo as any).sha || (b.base_repo as any).ref,
-        default_branch: b.default_branch,
-      });
-    } catch (e) {
-      await engine(c, target, "/internal/delete", { method: "POST" });
-      throw e;
-    }
-  }
-  if (upstream?.provider === "github")
-    await scheduleSync(c.env, {
-      id,
-      base_repo: JSON.stringify(upstream),
-    } as Repo);
   await audit(c, "repo.create", id, b.name);
   return c.json(
     {
@@ -1031,12 +823,8 @@ app.get("/api/repo-url/:id", async (c) => {
     name: r.name,
     url: `${c.env.APP_ORIGIN}/${r.namespace}/${encodeURIComponent(r.name)}.git`,
     ephemeral_url: `${c.env.APP_ORIGIN}/${r.namespace}/${encodeURIComponent(r.name)}+ephemeral.git`,
-    import_url: `${c.env.APP_ORIGIN}/${r.namespace}/${encodeURIComponent(r.name)}+import.git`,
   });
 });
-registerDeployTokenRoutes(app, { access: repoAccess });
-registerPackageRoutes(app, { access: repoAccess });
-registerCIRoutes(app, { access: repoAccess, audit });
 registerIssueWorkflows(app, { access: repoAccess });
 registerCollaboration(app, { access: repoAccess, engine: engineJSON, audit });
 app.get("/api/repos/:namespace/:repo/preview", async (c) => {
@@ -1067,7 +855,6 @@ app.get("/api/repos/:namespace/:repo/preview", async (c) => {
   });
 });
 registerForgeRoutes(app, { access: repoAccess, engine, audit });
-registerSyncRoutes(app, { access: repoAccess, engine, audit });
 for (const operation of [
   "branches",
   "tree",
@@ -1162,89 +949,11 @@ app.get("/api/repos/:namespace/:repo/audit", async (c) => {
     ).results,
   });
 });
-app.get("/api/repos/:namespace/:repo/webhooks", async (c) => {
-  const r = await repoAccess(c, "maintain");
-  return c.json({
-    webhooks: (
-      await c.env.DB.prepare(
-        "SELECT id,url,events,created_at FROM webhooks WHERE repo_id=? ORDER BY created_at",
-      )
-        .bind(r.id)
-        .all()
-    ).results,
-  });
-});
-app.post("/api/repos/:namespace/:repo/webhooks", async (c) => {
-  const r = await repoAccess(c, "maintain");
-  const b = await input(
-    c,
-    z.object({
-      url: z.string().url().max(2000),
-      events: z
-        .array(
-          z.enum([
-            "*",
-            "push",
-            "repo.sync.started",
-            "repo.sync.succeeded",
-            "repo.sync.failed",
-            "repo.create",
-            "repo.update",
-          ]),
-        )
-        .min(1)
-        .max(10)
-        .default(["*"]),
-    }),
-  );
-  let url;
-  try {
-    url = webhookURL(b.url, c.env.WEBHOOK_ALLOWED_HOSTS);
-  } catch {
-    fail(
-      400,
-      "Destination must be HTTPS on a WEBHOOK_ALLOWED_HOSTS hostname approved by the operator",
-    );
-  }
-  const id = crypto.randomUUID(),
-    secret = randomToken();
-  const result = await c.env.DB.prepare(
-    "INSERT INTO webhooks(id,repo_id,url,secret,events) SELECT ?,?,?,?,? WHERE (SELECT COUNT(*) FROM webhooks WHERE repo_id=?)<10",
-  )
-    .bind(id, r.id, url, secret, JSON.stringify(b.events), r.id)
-    .run();
-  if (!result.meta.changes) fail(409, "Maximum 10 webhooks per repository");
-  return c.json({ id, url, secret }, 201);
-});
-app.delete("/api/repos/:namespace/:repo/webhooks/:id", async (c) => {
-  const r = await repoAccess(c, "maintain");
-  await c.env.DB.prepare("DELETE FROM webhooks WHERE id=? AND repo_id=?")
-    .bind(c.req.param("id"), r.id)
-    .run();
-  return c.json({ ok: true });
-});
-app.get("/api/repos/:namespace/:repo/deliveries", async (c) => {
-  const r = await repoAccess(c, "maintain");
-  return c.json({
-    deliveries: (
-      await c.env.DB.prepare(
-        "SELECT d.id,d.webhook_id,d.state,d.attempts,d.last_status,d.created_at FROM deliveries d JOIN webhooks w ON w.id=d.webhook_id WHERE w.repo_id=? ORDER BY d.created_at DESC LIMIT 100",
-      )
-        .bind(r.id)
-        .all()
-    ).results,
-  });
-});
-// Canonical Git URLs include .git; only smart HTTP and the LFS protocol are exposed.
 app.all("/:namespace/:git/*", async (c, next) => {
   const gitName = c.req.param("git");
   if (!gitName.endsWith(".git")) return next();
   let name = gitName.slice(0, -4);
-  const gitNamespace = name.endsWith("+ephemeral")
-    ? "ephemeral"
-    : name.endsWith("+import")
-      ? "import"
-      : undefined;
+  const gitNamespace = name.endsWith("+ephemeral") ? "ephemeral" : undefined;
   if (gitNamespace) name = name.slice(0, -gitNamespace.length - 1);
   repoName.parse(name);
   slug.parse(c.req.param("namespace"));
@@ -1254,16 +963,6 @@ app.all("/:namespace/:git/*", async (c, next) => {
   const { repo: r, moved } = located;
   const suffix = new URL(c.req.url).pathname.split("/").slice(3).join("/"),
     u = c.get("user");
-  if (gitNamespace === "import" && r.base_repo)
-    fail(409, "Import remotes cannot be used with synced repositories");
-  if (
-    gitNamespace === "import" &&
-    !(
-      suffix === "git-receive-pack" ||
-      c.req.query("service") === "git-receive-pack"
-    )
-  )
-    fail(400, "Reads are disabled for +import remotes; use the normal remote");
   let writing =
     suffix === "git-receive-pack" ||
     c.req.query("service") === "git-receive-pack" ||
@@ -1296,12 +995,7 @@ app.all("/:namespace/:git/*", async (c, next) => {
     writing ? "git:write" : "git:read",
     `${r.namespace}/${r.name}`,
   );
-  const deploy = c.get("deploy");
-  if (deploy) {
-    if (writing) fail(403, "Deploy tokens cannot write Git or LFS");
-    await assertDeployAccess(c.env, r, deploy, "read_repository");
-  }
-  const role = deploy ? "reader" : await repositoryRole(c.env, r, u),
+  const role = await repositoryRole(c.env, r, u),
     read = r.visibility === "public" || roleRank[role] >= 1,
     write = roleRank[role] >= 2;
   if (!read)
@@ -1323,15 +1017,13 @@ app.all("/:namespace/:git/*", async (c, next) => {
     return c.redirect(url.href, 307);
   }
   if (writing && r.archived_at) fail(409, "Repository archived");
-  if (suffix.startsWith("info/lfs/") && r.base_repo && !githubLFS(r))
-    fail(409, "LFS is unavailable for generic or public GitHub sync");
   if (batch) {
     const objects = [];
     for (const object of batch.objects) {
       const exists = await c.env.OBJECTS.head(`lfs/${r.id}/${object.oid}`);
       const auth = c.req.header("authorization");
       const header = auth ? { Authorization: auth } : {};
-      const href = `${c.env.APP_ORIGIN}/${r.namespace}/${encodeURIComponent(r.name)}${gitNamespace ? "+" + gitNamespace : ""}.git/info/lfs/objects/${object.oid}${githubLFS(r) ? "?size=" + object.size : ""}`;
+      const href = `${c.env.APP_ORIGIN}/${r.namespace}/${encodeURIComponent(r.name)}.git/info/lfs/objects/${object.oid}`;
       if (exists && exists.size !== object.size) {
         objects.push({
           ...object,
@@ -1341,17 +1033,12 @@ app.all("/:namespace/:git/*", async (c, next) => {
       }
       objects.push({
         ...object,
-        authenticated: !!u || !!deploy,
-        ...(batch.operation === "download" && !exists && !githubLFS(r)
+        authenticated: !!u,
+        ...(batch.operation === "download" && !exists
           ? { error: { code: 404, message: "Object not found" } }
-          : batch.operation === "upload" &&
-              exists &&
-              !(githubLFS(r) && gitNamespace !== "ephemeral")
-            ? {}
-            : { actions: { [batch.operation]: { href, header } } }),
+          : { actions: { [batch.operation]: { href, header } } }),
       });
     }
-    if (deploy) await assertDeployAccess(c.env, r, deploy, "read_repository");
     return c.json({ transfer: "basic", objects });
   }
   const lfs = suffix.match(/^info\/lfs\/objects\/([0-9a-f]{64})$/);

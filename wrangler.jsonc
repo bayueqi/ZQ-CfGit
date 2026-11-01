@@ -4,12 +4,6 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
-  "services": [
-    {
-      "binding": "BUILDER",
-      "service": "zq-cfgit-build",
-    },
-  ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
@@ -48,33 +42,5 @@
   "observability": {
     "enabled": true,
   },
-  "queues": {
-    "producers": [
-      {
-        "binding": "EVENTS",
-        "queue": "zq-cfgit-events",
-      },
-    ],
-    "consumers": [
-      {
-        "queue": "zq-cfgit-events",
-        "max_batch_size": 5,
-        "max_batch_timeout": 1,
-        "max_retries": 5,
-      },
-    ],
-  },
-  "triggers": {
-    "crons": ["*/5 * * * *"],
-  },
   "workers_dev": true,
-  "ai": {
-    "binding": "AI",
-  },
-  "vectorize": [
-    {
-      "binding": "CODE_VECTORS",
-      "index_name": "zq-cfgit-code",
-    },
-  ],
 }

@@ -6,18 +6,10 @@ import {
   errorText,
   relativeTime,
   state as i18nState,
-} from "./i18n.js?v=3ff186564b930e02";
-const globalSearch = () => import("./search.js?v=af382007a7a5ee1f");
-const deployTokens = () => import("./deploy-tokens.js?v=1760aef45c5640a9");
-const packages = () => import("./packages.js?v=051f03a129b86eb2");
-const account = () => import("./account.js?v=e0bcfd152e6d3b60");
-const collaboration = () => import("./collaboration.js?v=dc11f85d43eb0f02");
-const platform = () => import("./manage.js?v=21bcd3e82f87db5b");
-import {
-  keyPage,
-  forgePage,
-  upstreamPage,
-} from "./forge.js?v=65209f6c735e53bb";
+} from "./i18n.js?v=3c48eba548be8390";
+const account = () => import("./account.js?v=84ca19f7a409fbf0");
+const collaboration = () => import("./collaboration.js?v=52dac5ee5694333a");
+import { forgePage } from "./forge.js?v=cf5a23606622e61f";
 const root = document.querySelector("#app");
 const esc = (x) =>
   String(x ?? "").replace(
@@ -285,7 +277,7 @@ function layout(content, crumb = i18nText("项目"), active = "repos") {
   document.title = heading + " · ZQ-CfGit";
   const navItem = (path, ic, label, key) =>
     link(path, icon(ic) + label, `navlink${active === key ? " active" : ""}`);
-  root.innerHTML = i18nHTML`<div class="layout"><aside class="sidebar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="workspace"><span class="avatar">${esc(user?.username[0].toUpperCase() || "Z")}</span><div>${esc(user?.username || "ZQ-CfGit")}</div></div><div class="eyebrow">项目</div><nav>${navItem("/search" + (selectedSpace ? "?namespace=" + encodeURIComponent(selectedSpace) : ""), "search", i18nText("跨项目搜索"), "search")}${navItem("/", "repo", i18nText("项目"), "repos")}${user ? navItem("/settings/tokens", "key", i18nText("访问令牌"), "tokens") : ""}${user ? navItem("/settings/keys", "link", i18nText("密钥与连接"), "keys") : ""}${user ? navItem("/settings/account", "shield", i18nText("账户安全"), "account") + navItem("/profile", "users", i18nText("我的动态"), "profile") : ""}</nav><footer>ZQ-CfGit</footer></aside><main class="main"><header class="topbar"><div class="breadcrumb"><span>${esc(heading)}</span></div><div class="right"><span class="pill">自托管</span>${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main></div>`;
+  root.innerHTML = i18nHTML`<div class="layout"><aside class="sidebar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="workspace"><span class="avatar">${esc(user?.username[0].toUpperCase() || "Z")}</span><div>${esc(user?.username || "ZQ-CfGit")}</div></div><div class="eyebrow">项目</div><nav>${navItem("/", "repo", i18nText("项目"), "repos")}${user ? navItem("/settings/tokens", "key", i18nText("访问令牌"), "tokens") : ""}${user ? navItem("/settings/account", "shield", i18nText("账户安全"), "account") + navItem("/profile", "users", i18nText("我的动态"), "profile") : ""}</nav><footer>ZQ-CfGit</footer></aside><main class="main"><header class="topbar"><div class="breadcrumb"><span>${esc(heading)}</span></div><div class="right"><span class="pill">自托管</span>${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main></div>`;
   document.querySelector("#logout")?.addEventListener("click", async () => {
     await api("/logout", { method: "POST" });
     user = null;
@@ -328,7 +320,7 @@ function authPage() {
   const initializing = setup;
   document.title =
     (initializing ? i18nText("初始化") : i18nText("登录")) + " · ZQ-CfGit";
-  root.innerHTML = i18nHTML`<main class="auth"><section class="auth-story"><a href="/" class="brand" data-link><img src="/logo.png" alt="">ZQ-CfGit</a><div><h1>代码的归属，<br><span>由你定义。</span></h1><p>从第一个 commit 到下一次合并。把仓库、讨论与协作，留在自己的空间。</p><div class="lines">$ git add .<br>$ git commit -m "a new beginning"<br>$ git push origin main</div></div></div></section><section class="auth-form"><form id="login-form"><h2>${initializing ? i18nText("初始化") : i18nText("欢迎回来")}</h2><p class="muted">${initializing ? i18nText("使用部署时配置的初始化密钥创建管理员。") : i18nText("登录 ZQ-CfGit，继续你的下一个想法。")}</p>${initializing ? field(i18nText("初始化密钥"), "secret", "password") : ""}${field(i18nText("用户名"), "username")}${field(i18nText("密码"), "password", "password", "", i18nText("至少 12 个字符"))}${!initializing ? i18nText('<div class="field"><label>双重验证（已启用时填写）<input name="otp" maxlength="64" autocomplete="one-time-code" placeholder="验证码或恢复码"></label></div>') : ""}<button type="submit" class="btn primary">${initializing ? i18nText("初始化 ZQ-CfGit") : i18nText("登录")} →</button>${!initializing ? link("/login/recover", i18nText("忘记密码？")) + link("/", i18nText("浏览公开项目 →")) : ""}</form></section></main>`;
+  root.innerHTML = i18nHTML`<main class="auth"><section class="auth-story"><a href="/" class="brand" data-link><img src="/logo.png" alt="">ZQ-CfGit</a><div><h1>代码的归属，<br><span>由你定义。</span></h1><p>从第一个 commit 到下一次合并。把仓库、讨论与协作，留在自己的空间。</p><div class="lines">$ git add .<br>$ git commit -m "a new beginning"<br>$ git push origin main</div></div></div></section><section class="auth-form"><form id="login-form"><h2>${initializing ? i18nText("初始化") : i18nText("欢迎回来")}</h2><p class="muted">${initializing ? i18nText("使用部署时配置的初始化密钥创建管理员。") : i18nText("登录 ZQ-CfGit，继续你的下一个想法。")}</p>${initializing ? field(i18nText("初始化密钥"), "secret", "password") : ""}${field(i18nText("用户名"), "username")}${field(i18nText("密码"), "password", "password", "", i18nText("至少 12 个字符"))}<button type="submit" class="btn primary">${initializing ? i18nText("初始化 ZQ-CfGit") : i18nText("登录")} →</button>${!initializing ? link("/", i18nText("浏览公开项目 →")) : ""}</form></section></main>`;
   bindForm("#login-form", async (data) => {
     if (initializing) {
       await api("/setup", { method: "POST", body: data });
@@ -336,11 +328,7 @@ function authPage() {
     }
     user = await api("/login", {
       method: "POST",
-      body: {
-        username: data.username,
-        password: data.password,
-        otp: data.otp || "",
-      },
+      body: { username: data.username, password: data.password },
     });
     go("/");
   });
@@ -385,8 +373,6 @@ function repoLayout(r, tab, content, actions = "") {
     i18nHTML`<div class="titlebar"><div><div class="inline"><h1>${esc(r.name)}</h1><span class="pill">${r.visibility === "public" ? i18nText("公开") : i18nText("私有")}</span></div><p class="muted">${esc(r.description || i18nText("添加描述，让伙伴了解这个项目。"))}</p></div>${actions}</div><nav class="tabs" aria-label="项目导航">${[
       ["code", i18nText("代码"), ""],
       ["commits", i18nText("提交"), "/commits"],
-      ["ci", "CI/CD", "/ci"],
-      ["packages", i18nText("包仓库"), "/packages"],
       ["forge", i18nText("Git 工具"), "/forge"],
       ["search", i18nText("搜索"), "/search"],
       ["issues", i18nText("议题"), "/issues"],
@@ -394,13 +380,8 @@ function repoLayout(r, tab, content, actions = "") {
       ["planning", i18nText("规划"), "/planning"],
       ["releases", i18nText("版本"), "/releases"],
       ["wiki", i18nText("维基"), "/wiki"],
-      ["deployments", i18nText("应用发布"), "/deployments"],
-      ["protect", i18nText("分支保护"), "/protect"],
       ...(["owner", "maintainer"].includes(r.role)
-        ? [
-            ["settings", i18nText("设置"), "/settings"],
-            ["upstream", i18nText("同步与 Fork"), "/upstream"],
-          ]
+        ? [["settings", i18nText("设置"), "/settings"]]
         : []),
     ]
       .map(([key, label, path]) =>
@@ -484,7 +465,7 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
   if (notebook) {
     try {
       const { mountNotebook } =
-        await import("./notebook.js?v=396e4a78385b6a07");
+        await import("./notebook.js?v=3a7f73b4c9c9ef4b");
       if (version !== routeVersion || !notebook.isConnected) return;
       mountNotebook(notebook, data.content, { base, ref: data.ref, path: p });
     } catch {
@@ -560,16 +541,8 @@ async function searchPage(r, base, ap, version) {
   repoLayout(
     r,
     "search",
-    i18nHTML`<section class="panel" id="code-index-status"></section><form class="toolbar" id="code-search"><div class="search"><input name="q" value="${esc(q)}" required maxlength="128" placeholder="在默认分支搜索代码…" aria-label="搜索代码"></div><button class="btn primary" type="submit">搜索代码</button></form><div class="panel"><div class="panelhead"><strong>${result.matches.length} 处匹配</strong><span class="muted">${esc(r.default_branch)}${result.truncated ? i18nText(" · 仅显示前 200 条") : ""}</span></div>${result.matches.map((m) => `<div class="comment">${link(base + "?view=blob&path=" + encodeURIComponent(m.path), esc(m.path) + ":" + m.line)}<pre>${esc(m.text)}</pre></div>`).join("") || '<div class="empty"><p>' + (q ? i18nText("没有匹配的代码。") : i18nText("输入关键词，搜索仓库中的文本文件。")) + "</p></div>"}</div>`,
+    i18nHTML`<form class="toolbar" id="code-search"><div class="search"><input name="q" value="${esc(q)}" required maxlength="128" placeholder="在默认分支搜索代码…" aria-label="搜索代码"></div><button class="btn primary" type="submit">搜索代码</button></form><div class="panel"><div class="panelhead"><strong>${result.matches.length} 处匹配</strong><span class="muted">${esc(r.default_branch)}${result.truncated ? i18nText(" · 仅显示前 200 条") : ""}</span></div>${result.matches.map((m) => `<div class="comment">${link(base + "?view=blob&path=" + encodeURIComponent(m.path), esc(m.path) + ":" + m.line)}<pre>${esc(m.text)}</pre></div>`).join("") || '<div class="empty"><p>' + (q ? i18nText("没有匹配的代码。") : i18nText("输入关键词，搜索仓库中的文本文件。")) + "</p></div>"}</div>`,
   );
-  const indexUI = await import("./search.js?v=af382007a7a5ee1f");
-  if (version !== routeVersion) return;
-  indexUI.mountCodeIndex(document.querySelector("#code-index-status"), r, ap, {
-    api,
-    esc,
-    notice,
-    current: () => version === routeVersion,
-  });
   document.querySelector("#code-search").onsubmit = (e) => {
     e.preventDefault();
     go(
@@ -667,7 +640,7 @@ async function issuesPage(r, base, ap, sub, version, helpers) {
     });
     return i;
   }
-  return (await import("./issues.js?v=a85f198b6cf1c1ab")).issuesPage(
+  return (await import("./issues.js?v=1b3a8a841c45c547")).issuesPage(
     r,
     base,
     ap,
@@ -688,16 +661,12 @@ async function mergesPage(r, base, ap, sub, version) {
   });
 }
 async function settingsPage(r, base, ap, version) {
-  const [{ events }, { webhooks }, { deliveries }] = await Promise.all([
-    api(ap + "/audit"),
-    api(ap + "/webhooks"),
-    api(ap + "/deliveries"),
-  ]);
+  const { events } = await api(ap + "/audit");
   if (version !== routeVersion) return;
   repoLayout(
     r,
     "settings",
-    i18nHTML`<p><a data-link href="${base}/deploy-tokens" class="btn">部署令牌</a></p><div class="stack">${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="project-lifecycle"><h2>${r.archived_at ? i18nText("恢复项目") : i18nText("归档项目")}</h2><p class="muted">归档后可继续 clone、下载和读取历史；停止写入及新流水线，取消正在执行的任务。已发布应用保留最后版本。恢复后，已取消任务需要手动重试。</p><button type="submit" class="btn">${r.archived_at ? i18nText("取消归档") : i18nText("归档为只读")}</button></form></div>` : ""}${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">转移或重命名项目</summary><form class="form" id="project-transfer">${field(i18nText("目标命名空间"), "namespace", "text", r.namespace, i18nText("填写用户名或分组路径，例如 zq 或 zq/tools。"))}${field(i18nText("目标项目名"), "name", "text", r.name)}<p class="muted">保留代码、Issues、MR、Wiki 与历史产物；显式项目成员保留，团队继承权限重新计算。跨空间转移会取消 CI 与同步，撤销 Runner、Git 连接及 Webhook，暂停自动流水线并关闭应用公开访问；目标空间需要重新配置后启用。同空间重命名保留连接、运行与发布状态。</p><label><input type="checkbox" required name="acknowledge">我已了解连接与发布状态的变更</label><button class="btn" type="submit">转移项目</button></form></details>` : ""}<div class="panel"><form class="form" id="repo-settings"><h2>项目设置</h2>${textarea(i18nText("项目描述"), "description", r.description)}${field(i18nText("默认分支"), "default_branch", "text", r.default_branch)}<div class="field"><label for="visibility">可见性</label><select name="visibility" id="visibility"><option value="private" ${r.visibility === "private" ? "selected" : ""}>私有 · 仅成员可访问</option><option value="public" ${r.visibility === "public" ? "selected" : ""}>公开 · 所有人可读取</option></select></div><button class="btn primary" type="submit">保存设置</button></form></div><div class="panel"><div class="panelhead"><strong>Webhook</strong><span class="muted">${webhooks.length} / 10</span></div>${webhooks.map((h) => i18nHTML`<div class="token-row"><span>${esc(h.url)}</span><button class="btn small danger" data-hook="${h.id}">移除</button></div>`).join("")}<form class="form" id="webhook"><p class="muted">接收地址须为管理员已允许的 HTTPS 主机。签名密钥仅在创建时显示一次。</p>${field(i18nText("接收地址"), "url", "url")}<button class="btn primary" type="submit">添加 Webhook</button><div id="hook-result"></div></form></div><div class="panel"><div class="panelhead"><strong>最近投递</strong></div>${deliveries.length ? deliveries.map((d) => i18nHTML`<div class="token-row"><code>${esc(d.id.slice(0, 8))}</code><span class="pill">${esc(i18nState(d.state))}</span><span class="muted">${d.attempts} 次尝试 · HTTP ${d.last_status || "—"}</span></div>`).join("") : i18nText('<div class="empty"><p>暂无投递记录。</p></div>')}</div><div class="panel"><div class="panelhead"><strong>审计记录</strong><span class="muted">最近 100 条</span></div>${events.map((e) => `<div class="token-row"><div><strong>${esc(e.action)}</strong><p class="muted">${esc(e.actor || "system")} · ${esc(e.detail)}</p></div><span class="muted">${date(e.created_at)}</span></div>`).join("")}</div></div>`,
+    i18nHTML`<div class="stack">${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="project-lifecycle"><h2>${r.archived_at ? i18nText("恢复项目") : i18nText("归档项目")}</h2><p class="muted">归档后可继续 clone、下载和读取历史；停止写入及新流水线，取消正在执行的任务。已发布应用保留最后版本。恢复后，已取消任务需要手动重试。</p><button type="submit" class="btn">${r.archived_at ? i18nText("取消归档") : i18nText("归档为只读")}</button></form></div>` : ""}${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">转移或重命名项目</summary><form class="form" id="project-transfer">${field(i18nText("目标命名空间"), "namespace", "text", r.namespace, i18nText("填写用户名或分组路径，例如 zq 或 zq/tools。"))}${field(i18nText("目标项目名"), "name", "text", r.name)}<p class="muted">保留代码、Issues、MR、Wiki 与历史产物；显式项目成员保留，团队继承权限重新计算。跨空间转移会取消 CI 与同步，撤销 Runner、Git 连接及 Webhook，暂停自动流水线并关闭应用公开访问；目标空间需要重新配置后启用。同空间重命名保留连接、运行与发布状态。</p><label><input type="checkbox" required name="acknowledge">我已了解连接与发布状态的变更</label><button class="btn" type="submit">转移项目</button></form></details>` : ""}<div class="panel"><form class="form" id="repo-settings"><h2>项目设置</h2>${textarea(i18nText("项目描述"), "description", r.description)}${field(i18nText("默认分支"), "default_branch", "text", r.default_branch)}<div class="field"><label for="visibility">可见性</label><select name="visibility" id="visibility"><option value="private" ${r.visibility === "private" ? "selected" : ""}>私有 · 仅成员可访问</option><option value="public" ${r.visibility === "public" ? "selected" : ""}>公开 · 所有人可读取</option></select></div><button class="btn primary" type="submit">保存设置</button></form></div><div class="panel"><div class="panelhead"><strong>审计记录</strong><span class="muted">最近 100 条</span></div>${events.map((e) => `<div class="token-row"><div><strong>${esc(e.action)}</strong><p class="muted">${esc(e.actor || "system")} · ${esc(e.detail)}</p></div><span class="muted">${date(e.created_at)}</span></div>`).join("")}</div></div>`,
   );
   bindForm("#project-transfer", async (data) => {
     const result = await api(ap + "/transfer", {
@@ -726,25 +695,9 @@ async function settingsPage(r, base, ap, version) {
   if (r.archived_at)
     document
       .querySelectorAll(
-        "#repo-settings input, #repo-settings textarea, #repo-settings select, #repo-settings button, #webhook input, #webhook button, [data-hook]",
+        "#repo-settings input, #repo-settings textarea, #repo-settings select, #repo-settings button",
       )
       .forEach((el) => (el.disabled = true));
-  bindForm("#webhook", async (data) => {
-    const result = await api(ap + "/webhooks", { method: "POST", body: data });
-    document.querySelector("#hook-result").innerHTML =
-      i18nHTML`<div class="token-display">已添加。请保存签名密钥：<code>${esc(result.secret)}</code></div>`;
-  });
-  document.querySelectorAll("[data-hook]").forEach(
-    (b) =>
-      (b.onclick = async () => {
-        try {
-          await api(ap + "/webhooks/" + b.dataset.hook, { method: "DELETE" });
-          render();
-        } catch (e) {
-          notice(e.message);
-        }
-      }),
-  );
   bindForm("#repo-settings", async (data) => {
     await api(ap, { method: "PATCH", body: data });
     notice(i18nText("项目设置已保存"));
@@ -800,45 +753,38 @@ async function render() {
   hasRendered = true;
   const version = ++routeVersion;
   const path = location.pathname;
-  if (path === "/" || path === "/search")
+  if (path === "/")
     selectedSpace = new URLSearchParams(location.search).get("namespace") || "";
   const titles = {
     tokens: i18nText("访问令牌"),
-    keys: i18nText("密钥与连接"),
     commits: i18nText("提交"),
     forge: i18nText("Git 工具"),
-    upstream: i18nText("同步与 Fork"),
     issues: i18nText("议题"),
     merges: i18nText("合并请求"),
     settings: i18nText("设置"),
-    "deploy-tokens": i18nText("部署令牌"),
-    packages: i18nText("包仓库"),
     search: i18nText("搜索"),
     code: i18nText("代码"),
     new: i18nText("新建项目"),
     login: i18nText("登录"),
     profile: i18nText("我的动态"),
     account: i18nText("账户安全"),
-    recover: i18nText("找回密码"),
   };
   const segments = path.split("/").filter(Boolean),
     segment = segments.at(-1),
     repoPath =
       segments.length > 1 &&
-      !["settings", "login", "new", "profile", "search"].includes(segments[0]),
+      !["settings", "login", "new", "profile"].includes(segments[0]),
     title = repoPath
       ? `${segments[0]} / ${segments[1]}`
       : titles[segment] || i18nText("项目");
   layout(
     loadingContent(title),
     title,
-    path === "/search"
-      ? "search"
-      : path === "/profile"
-        ? "profile"
-        : path.startsWith("/settings/")
-          ? segment
-          : "repos",
+    path === "/profile"
+      ? "profile"
+      : path.startsWith("/settings/")
+        ? segment
+        : "repos",
   );
   primeRoute();
   try {
@@ -864,17 +810,8 @@ async function render() {
       icon,
       current: () => version === routeVersion,
       user,
-      qr: () => import("./qr.js?v=9bb5494c3ba088b6"),
       markdown: applyMarkdown,
     };
-    if (path === "/search") {
-      await (await globalSearch()).searchPage(helpers);
-      return;
-    }
-    if (path === "/login/recover") {
-      (await account()).recoverPasswordPage(helpers);
-      return;
-    }
     if (path === "/settings/account") {
       if (!user) return go("/login");
       await (await account()).securityPage(helpers);
@@ -889,11 +826,6 @@ async function render() {
           user?.username ||
           "",
       );
-      return;
-    }
-    if (path === "/settings/keys") {
-      if (!user) return go("/login");
-      await keyPage(helpers);
       return;
     }
     if (path === "/settings/tokens") {
@@ -927,18 +859,11 @@ async function render() {
       loadingContent(titles[tab] || i18nText("文件")),
     );
     if (!tab) await codePage(r, base, ap, version);
-    else if (tab === "packages")
-      await (await packages()).packagePage(r, base, ap, helpers, sub);
-    else if (tab === "ci")
-      await (await platform()).ciPage(r, base, ap, helpers, sub);
-    else if (
-      ["protect", "planning", "releases", "wiki", "deployments"].includes(tab)
-    )
+    else if (["planning", "releases", "wiki"].includes(tab))
       await (await collaboration()).projectPage(r, base, ap, helpers, tab, sub);
     else if (tab === "merges" && sub)
       await (await collaboration()).reviewPage(r, base, ap, helpers, sub);
     else if (tab === "forge") await forgePage(r, base, ap, helpers);
-    else if (tab === "upstream") await upstreamPage(r, base, ap, helpers);
     else if (tab === "search") await searchPage(r, base, ap, version);
     else if (tab === "edit") await editPage(r, base, ap, version);
     else if (tab === "commits") await commitsPage(r, base, ap, version);
@@ -947,8 +872,6 @@ async function render() {
       if (sub && issue && version === routeVersion)
         await (await collaboration()).issuePlanning(r, ap, helpers, issue);
     } else if (tab === "merges") await mergesPage(r, base, ap, sub, version);
-    else if (tab === "deploy-tokens")
-      await (await deployTokens()).deployTokensPage(helpers, { r, base, ap });
     else if (tab === "settings") await settingsPage(r, base, ap, version);
     else throw Error(i18nText("页面不存在"));
     if (version === routeVersion)

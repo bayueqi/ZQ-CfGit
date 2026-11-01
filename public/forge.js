@@ -1,72 +1,7 @@
 import {
   text as i18nText,
   html as i18nHTML,
-  getLocale,
-} from "./i18n.js?v=3ff186564b930e02";
-export async function keyPage(h) {
-  const { api, layout, esc, field, textarea, bindForm, notice, render } = h;
-  const [{ keys: apiKeys }, { keys: signing }, github] = await Promise.all([
-    api("/api-keys"),
-    api("/signing-keys"),
-    api("/integrations/github"),
-  ]);
-  if (!h.current()) return;
-  const list = (keys, type) =>
-    keys
-      .map(
-        (k) =>
-          i18nHTML`<div class="token-row"><div><strong>${esc(k.name)}</strong><p class="muted">${esc(k.algorithm || k.fingerprint)}</p></div><button class="btn small danger" data-key="${esc(type + "/" + k.id)}">撤销</button></div>`,
-      )
-      .join("");
-  layout(
-    i18nHTML`<div class="titlebar"><div><h1>密钥与连接</h1><p class="muted">为自动化签发短期权限，连接上游代码仓库。</p></div></div><div class="forge-grid"><section class="panel"><div class="panelhead"><strong>JWT API 公钥</strong></div>${list(apiKeys, "api-keys")}<form id="api-key" class="form"><p class="muted">客户端保留私钥；ZQ-CfGit 仅保存公钥。撤销后，现有 JWT 立即失效。</p>${field(i18nText("名称"), "name")}${textarea(i18nText("SPKI 公钥 PEM"), "public_key")}<div class="field"><label>签名算法</label><select name="algorithm"><option>ES256</option><option>ES384</option><option>ES512</option><option>RS256</option></select></div><button type="submit" class="btn primary">注册公钥</button></form></section><section class="panel"><div class="panelhead"><strong>提交签名公钥</strong></div>${list(signing, "signing-keys")}<form id="signing-key" class="form"><p class="muted">用于 verify-sig 引用策略，支持 SSH 与 OpenPGP。</p>${field(i18nText("名称"), "signing-name")}${textarea(i18nText("SSH / OpenPGP 公钥"), "signing-public-key")}<button type="submit" class="btn primary">注册签名公钥</button></form></section></div><section class="panel"><form id="github-app" class="form"><h2>GitHub App</h2><p class="muted">${github.configured ? i18nText("已配置 · App ") + esc(github.app_id) : i18nText("尚未连接")}。安装令牌按仓库申请，私钥和 Webhook 密钥加密存储。</p>${github.webhook_url ? `<code>${esc(github.webhook_url)}</code>` : ""}${field("应用 ID", "app_id", "text", github.app_id || "")}${field("安装 ID", "installation_id", "text", github.installation_id || "")}${textarea(i18nText("App 私钥 PEM"), "private_key")}${field(i18nText("Webhook 密钥"), "webhook_secret", "password")}<div class="inline"><button type="submit" class="btn primary">保存连接</button>${github.configured ? i18nText('<button type="button" class="btn danger" id="disconnect-github">断开连接</button>') : ""}</div></form></section><section class="panel"><div class="form"><h2>Agent 接入</h2><p>MCP 地址：<code>${esc(location.origin + "/mcp")}</code></p><p class="muted">使用 Bearer PAT 或短期 JWT。工具调用沿用仓库权限和引用策略。</p><a href="/llms.txt" target="_blank">机器可读说明 ↗</a></div></section>`,
-    i18nText("密钥与连接"),
-    "keys",
-  );
-  bindForm("#api-key", async (d) => {
-    await api("/api-keys", { method: "POST", body: d });
-    render();
-  });
-  bindForm("#signing-key", async (d) => {
-    await api("/signing-keys", {
-      method: "POST",
-      body: { name: d["signing-name"], public_key: d["signing-public-key"] },
-    });
-    render();
-  });
-  const githubSecret = document.querySelector(
-    '#github-app [name="webhook_secret"]',
-  );
-  githubSecret.minLength = 16;
-  githubSecret.maxLength = 1000;
-  githubSecret.autocomplete = "new-password";
-  bindForm("#github-app", async (d) => {
-    await api("/integrations/github", { method: "PUT", body: d });
-    notice(i18nText("GitHub App 连接已保存"));
-    render();
-  });
-  document.querySelectorAll("[data-key]").forEach(
-    (b) =>
-      (b.onclick = async () => {
-        try {
-          await api("/" + b.dataset.key, { method: "DELETE" });
-          render();
-        } catch (e) {
-          notice(e.message);
-        }
-      }),
-  );
-  document
-    .querySelector("#disconnect-github")
-    ?.addEventListener("click", async () => {
-      try {
-        await api("/integrations/github", { method: "DELETE" });
-        render();
-      } catch (e) {
-        notice(e.message);
-      }
-    });
-}
+} from "./i18n.js?v=3c48eba548be8390";
 export async function forgePage(r, base, ap, h) {
   const { api, repoLayout, esc, field, textarea, bindForm, notice, go } = h;
   const ephemeral =
@@ -222,58 +157,5 @@ export async function forgePage(r, base, ap, h) {
     document.querySelector("#blame-result").textContent = result.lines
       .map((l) => `${l.line}  ${l.sha.slice(0, 8)}  ${l.author}  ${l.content}`)
       .join("\n");
-  });
-}
-export async function upstreamPage(r, base, ap, h) {
-  const { api, repoLayout, field, esc, bindForm, notice, go, render } = h;
-  const status = await api(ap + "/sync-status");
-  if (!h.current()) return;
-  const upstream = status.upstream || {};
-  repoLayout(
-    r,
-    "upstream",
-    i18nHTML`<div class="forge-grid"><section class="panel"><form id="upstream-config" class="form"><h2>连接上游</h2><p class="muted">双向同步时，普通分支写入先由上游确认。公开仓库导入需手动拉取，临时分支留在 ZQ-CfGit。</p><div class="field"><label>提供方</label><select name="provider">${["github", "gitlab", "bitbucket", "gitea", "forgejo", "codeberg", "sourcehut"].map((p) => `<option ${upstream.provider === p ? "selected" : ""}>${p}</option>`).join("")}</select></div>${field(i18nText("上游所有者 / 组"), "owner", "text", upstream.owner || "")}${field(i18nText("上游仓库"), "name", "text", upstream.name || "")}<div class="field"><label>自托管域名（可选，须已获管理员允许）</label><input name="upstream_host" value="${esc(upstream.upstream_host || "")}"></div><div class="field"><label>GitHub 模式</label><select name="mode"><option value="public" ${upstream.mode === "public" ? "selected" : ""}>公开仓库导入</option><option value="app" ${upstream.mode === "app" ? "selected" : ""}>GitHub App 双向同步</option></select></div><button type="submit" class="btn primary">保存上游</button></form></section><section class="panel"><div class="form"><h2>同步状态</h2><span class="pill">${esc(status.status)}</span><p>${esc(status.error || "")}</p><p class="muted">最近成功：${esc(status.synced_at || i18nText("尚未同步"))}</p><button class="btn primary" id="pull-upstream" ${upstream.provider ? "" : "disabled"}>拉取上游</button><button class="btn" id="refresh-sync">刷新</button></div>${status.jobs.map((j) => i18nHTML`<div class="token-row"><code>${esc(j.id.slice(0, 8))}</code><span>${esc(j.status)}</span><span class="muted">${j.attempts} 次尝试</span></div>`).join("")}<form id="git-credential" class="form"><h3>HTTPS 上游凭据</h3><p class="muted">用于 GitLab、Gitea 等。GitHub App 在「密钥与连接」中配置。</p>${field(i18nText("用户名"), "username", "text", "oauth2")}${field(i18nText("密码 / Token"), "password", "password")}<button class="btn" type="submit">保存凭据</button></form></section></div><section class="panel"><form class="form" id="fork"><h2>创建独立 Fork</h2>${field(i18nText("新仓库名称"), "name", "text", r.name + "-fork")}${field(i18nText("起点分支 / SHA"), "ref", "text", r.default_branch)}<button class="btn" type="submit">创建副本</button></form><form class="form" id="delete-repo"><h2>删除仓库</h2><p class="muted">引用、Git 数据、LFS 和协作记录将被清理。输入项目名称确认。</p>${field(i18nText("仓库名称"), "confirmation")}<button class="btn danger" type="submit">删除仓库</button></form></section>`,
-  );
-  bindForm("#upstream-config", async (d) => {
-    if (!d.upstream_host) delete d.upstream_host;
-    await api(ap + "/upstream", { method: "PUT", body: d });
-    notice(i18nText("上游已配置，点击拉取开始同步"));
-    render();
-  });
-  const upstreamPassword = document.querySelector(
-    '#git-credential [name="password"]',
-  );
-  upstreamPassword.minLength = 1;
-  upstreamPassword.maxLength = 10000;
-  upstreamPassword.autocomplete = "new-password";
-  bindForm("#git-credential", async (d) => {
-    const current = await api(ap + "/git-credentials");
-    await api(ap + "/git-credentials", {
-      method: current.credentials.length ? "PUT" : "POST",
-      body: d,
-    });
-    notice(i18nText("凭据已加密保存"));
-  });
-  document.querySelector("#pull-upstream").onclick = async () => {
-    try {
-      await api(ap + "/pull-upstream", { method: "POST", body: {} });
-      notice(i18nText("已加入同步队列"));
-      render();
-    } catch (e) {
-      notice(e.message);
-    }
-  };
-  document.querySelector("#refresh-sync").onclick = render;
-  bindForm("#fork", async (d) => {
-    const created = await api("/repos", {
-      method: "POST",
-      body: { name: d.name, base_repo: { id: r.id, ref: d.ref } },
-    });
-    go("/" + created.namespace + "/" + encodeURIComponent(created.name));
-  });
-  bindForm("#delete-repo", async (d) => {
-    if (d.confirmation !== r.name) throw Error(i18nText("仓库名称不匹配"));
-    await api(ap, { method: "DELETE" });
-    go("/");
   });
 }

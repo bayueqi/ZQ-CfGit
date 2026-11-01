@@ -16,7 +16,6 @@ export const slug = z
         "spaces",
         "login",
         "mcp",
-        "webhooks",
       ].includes(s),
     "Reserved name",
   );

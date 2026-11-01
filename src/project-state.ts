@@ -6,16 +6,11 @@ export function archivedApiWrite(method: string, operation: string) {
   if (["lifecycle", "transfer", "star", "watch"].includes(operation))
     return false;
   if (operation === "" && method === "DELETE") return false;
-  if (/^(members|deploy-tokens)(?:\/|$)/.test(operation)) return false;
-  if (/^ci\/runners\//.test(operation) && method === "DELETE") return false;
-  if (
-    method === "POST" &&
-    ["grep", "archive", "code-index/rebuild"].includes(operation)
-  )
-    return false;
+  if (/^members(?:\/|$)/.test(operation)) return false;
+  if (method === "POST" && ["grep", "archive"].includes(operation)) return false;
   return true;
 }
-/** Executed after entering the repository DO queue, before any mutation or upstream I/O. */
+/** Executed after entering the repository DO queue, before any mutation. */
 export function assertRepositoryWritable(repo: Repo | null, request: Request) {
   if (!repo?.archived_at) return;
   const url = new URL(request.url),
@@ -23,9 +18,7 @@ export function assertRepositoryWritable(repo: Repo | null, request: Request) {
   if (
     path === "/internal/delete" ||
     path === "/internal/lifecycle" ||
-    path === "/internal/transfer" ||
-    path === "/internal/code-index-wake" ||
-    path === "/internal/code-index-tick"
+    path === "/internal/transfer"
   )
     return;
   if (
@@ -35,12 +28,7 @@ export function assertRepositoryWritable(repo: Repo | null, request: Request) {
     return;
   if (
     request.method === "POST" &&
-    [
-      "/grep",
-      "/archive",
-      "/git/git-upload-pack",
-      "/internal/fork-export",
-    ].includes(path)
+    ["/grep", "/archive", "/git/git-upload-pack"].includes(path)
   )
     return;
   fail(409, "Repository archived; an owner must unarchive it before writing");
@@ -68,12 +56,6 @@ export async function changeProjectState(
       env.DB.prepare(
         "UPDATE repositories SET archived_at=CASE WHEN ?=1 THEN COALESCE(archived_at,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ELSE NULL END,lifecycle_revision=lifecycle_revision+1 WHERE id=?",
       ).bind(archived ? 1 : 0, repoId),
-      env.DB.prepare(
-        "UPDATE ci_runs SET status='canceled',error='Repository archived',finished_at=datetime('now'),lease_hash=NULL,lease_until=NULL WHERE repo_id=? AND status IN ('queued','running') AND ?=1",
-      ).bind(repoId, archived ? 1 : 0),
-      env.DB.prepare(
-        "UPDATE sync_jobs SET status='cancelled',error='Repository archived',lease_until=0 WHERE repo_id=? AND status='pending' AND ?=1",
-      ).bind(repoId, archived ? 1 : 0),
       env.DB.prepare(
         "INSERT INTO audit(repo_id,actor_id,action,detail) VALUES(?,?,?,?)",
       ).bind(

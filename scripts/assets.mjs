@@ -22,22 +22,6 @@ for (const file of (await readdir("public")).filter(
     ),
   );
 }
-const cacheVersion = hash(await readFile("public/ci-cache.js"));
-await update(
-  "public/manage.js",
-  (await readFile("public/manage.js", "utf8")).replace(
-    /from "\.\/ci-cache\.js(?:\?v=[a-f0-9]+)?"/,
-    `from "./ci-cache.js?v=${cacheVersion}"`,
-  ),
-);
-const variableVersion = hash(await readFile("public/ci-variables.js"));
-await update(
-  "public/manage.js",
-  (await readFile("public/manage.js", "utf8")).replace(
-    /from "\.\/ci-variables\.js(?:\?v=[a-f0-9]+)?"/,
-    `from "./ci-variables.js?v=${variableVersion}"`,
-  ),
-);
 let notebook = await readFile("public/notebook.js", "utf8");
 for (const name of ["markdown", "highlight"]) {
   const version = hash(await readFile(`public/${name}.js`));
@@ -50,17 +34,12 @@ await update("public/notebook.js", notebook);
 const forge = hash(await readFile("public/forge.js"));
 let app = await readFile("public/app.js", "utf8");
 for (const name of [
-  "search",
-  "deploy-tokens",
-  "packages",
-  "manage",
   "issues",
   "highlight",
   "collaboration",
   "account",
   "markdown",
   "notebook",
-  "qr",
 ]) {
   const version = hash(await readFile(`public/${name}.js`));
   app = app.replace(

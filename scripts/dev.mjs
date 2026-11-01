@@ -1,12 +1,14 @@
 import { spawn } from "node:child_process";
 const children = [];
-function run(cmd, args, options = {}) {
-  const child = spawn(cmd, args, { stdio: "inherit", ...options });
+const wrangler = "node_modules/wrangler/bin/wrangler.js";
+function run(args) {
+  const child = spawn(process.execPath, [wrangler, ...args], {
+    stdio: "inherit",
+  });
   children.push(child);
   return child;
 }
-const migration = run("npx", [
-  "wrangler",
+const migration = run([
   "d1",
   "migrations",
   "apply",
@@ -17,14 +19,7 @@ const migration = run("npx", [
 ]);
 migration.on("exit", (code) => {
   if (code) return process.exit(code);
-  run("npx", [
-    "wrangler",
-    "dev",
-    "--config",
-    "wrangler.local.jsonc",
-    "--config",
-    "wrangler.build.jsonc",
-  ]);
+  run(["dev", "--config", "wrangler.local.jsonc"]);
 });
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => {

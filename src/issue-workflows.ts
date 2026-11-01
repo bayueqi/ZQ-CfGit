@@ -1,4 +1,3 @@
-import { publishPending } from "./webhooks";
 import { z } from "zod";
 import type { App, Env, Repo, User } from "./types";
 import type { Context, Hono } from "hono";
@@ -373,19 +372,6 @@ export async function changeIssues(
     ).bind(repo.id, user.id, action, detail),
     env.DB.prepare("DELETE FROM mutation_guards WHERE id=?").bind(guard),
   );
-  const event = {
-    id: crypto.randomUUID(),
-    event: action,
-    repository_id: repo.id,
-    actor: user.username,
-    detail,
-    timestamp: new Date().toISOString(),
-  };
-  statements.push(
-    env.DB.prepare(
-      "INSERT INTO deliveries(id,webhook_id,payload) SELECT ?||':'||w.id,w.id,? FROM webhooks w WHERE w.repo_id=? AND EXISTS(SELECT 1 FROM json_each(w.events) WHERE value='*' OR value=?)",
-    ).bind(event.id, JSON.stringify(event), repo.id, action),
-  );
   try {
     await env.DB.batch(statements);
   } catch (e) {
@@ -400,31 +386,6 @@ interface Helpers {
 }
 export function registerIssueWorkflows(app: Hono<App>, h: Helpers) {
   const base = "/api/repos/:namespace/:repo";
-  const notify = (c: Context<App>) => {
-    if (c.env.EVENTS) c.executionCtx.waitUntil(publishPending(c.env));
-  };
-  app.use(base + "/issues/*", async (c, next) => {
-    await next();
-    if (
-      c.res.ok &&
-      (c.req.method === "PATCH" ||
-        c.req.path.endsWith("/bulk") ||
-        c.req.path.endsWith("/planning") ||
-        c.req.path.endsWith("/move"))
-    )
-      notify(c);
-  });
-  app.use(base + "/issue-boards/*", async (c, next) => {
-    await next();
-    if (
-      c.res.ok &&
-      (c.req.method === "PATCH" ||
-        c.req.path.endsWith("/bulk") ||
-        c.req.path.endsWith("/planning") ||
-        c.req.path.endsWith("/move"))
-    )
-      notify(c);
-  });
   const access = async (
     c: Context<App>,
     level: "read" | "write" | "maintain" = "read",

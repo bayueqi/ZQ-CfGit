@@ -59,49 +59,16 @@ export async function transferProject(
       env.DB.prepare(
         "UPDATE repositories SET archived_at=NULL WHERE id=?",
       ).bind(repo.id),
-      ...(crossing
-        ? [
-            env.DB.prepare(
-              "UPDATE ci_runs SET status='canceled',error='Project transferred',finished_at=datetime('now'),lease_hash=NULL,lease_until=NULL WHERE repo_id=? AND status IN('queued','running')",
-            ).bind(repo.id),
-            env.DB.prepare(
-              "UPDATE sync_jobs SET status='cancelled',error='Project transferred',lease_until=0 WHERE repo_id=? AND status='pending'",
-            ).bind(repo.id),
-            env.DB.prepare("DELETE FROM ci_runners WHERE repo_id=?").bind(
-              repo.id,
-            ),
-            env.DB.prepare("DELETE FROM git_credentials WHERE repo_id=?").bind(
-              repo.id,
-            ),
-            env.DB.prepare("DELETE FROM webhooks WHERE repo_id=?").bind(
-              repo.id,
-            ),
-            env.DB.prepare(
-              "UPDATE ci_pipelines SET enabled=0 WHERE repo_id=?",
-            ).bind(repo.id),
-            env.DB.prepare(
-              "UPDATE environments SET public=0,updated_at=datetime('now') WHERE repo_id=?",
-            ).bind(repo.id),
-          ]
-        : [
-            env.DB.prepare(
-              "UPDATE sync_jobs SET lifecycle_revision=? WHERE repo_id=? AND status='pending'",
-            ).bind(revision + 1, repo.id),
-          ]),
       env.DB.prepare(
         "INSERT INTO repository_aliases(namespace,name,repo_id) SELECT namespace,name,id FROM repositories WHERE id=?",
       ).bind(repo.id),
       env.DB.prepare(
-        "UPDATE repositories SET namespace=?,name=?,workspace_id=?,owner_id=?,base_repo=?,sync_status=?,sync_error=?,synced_at=?,archived_at=?,lifecycle_revision=lifecycle_revision+1 WHERE id=?",
+        "UPDATE repositories SET namespace=?,name=?,workspace_id=?,owner_id=?,archived_at=?,lifecycle_revision=lifecycle_revision+1 WHERE id=?",
       ).bind(
         destination,
         name,
         targetSpace?.id || null,
         crossing ? actor : repo.owner_id,
-        crossing ? null : repo.base_repo || null,
-        crossing ? "idle" : repo.sync_status || "idle",
-        crossing ? null : repo.sync_error || null,
-        crossing ? null : repo.synced_at || null,
         repo.archived_at || null,
         repo.id,
       ),

@@ -96,12 +96,6 @@ export async function projectMerge(
       "UPDATE merge_requests SET state='merged',merged_sha=? WHERE id=? AND repo_id=?",
     ).bind(result.sha, mrId, repoId),
   ];
-  if (result.queue_id)
-    statements.push(
-      env.DB.prepare(
-        "UPDATE merge_queue SET state='merged',reason='',merged_sha=?,finished_at=? WHERE id=? AND mr_id=? AND repo_id=?",
-      ).bind(result.sha, Date.now(), result.queue_id, mrId, repoId),
-    );
   if (result.issue_ids?.length)
     statements.push(
       env.DB.prepare(

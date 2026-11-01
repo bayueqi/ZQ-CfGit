@@ -1,10 +1,3 @@
-import { assertDeployGitRequest } from "./deploy-tokens";
-import { advanceCodeIndex } from "./code-index";
-import {
-  advanceQueue,
-  queueMutation,
-  validateQueuePublication,
-} from "./merge-queue";
 import { RequestGate } from "./git/request-gate";
 import { BrowseCache } from "./git/browse-cache";
 import { updatesAt } from "./git/tree-updates";
@@ -36,13 +29,10 @@ import {
   projectMerge,
   type MergeResult,
 } from "./merge-issues";
-import { importContribution } from "./fork-reviews";
 import { reviewMutation, reviewActor } from "./review-mutations";
 import { z } from "zod";
-import { protectRefs, reviewGate } from "./review";
+import { reviewGate } from "./review";
 import { ObjectCache } from "./git/object-cache";
-import { upstreamClient, pullRepository, scheduleSync } from "./sync";
-import { forgeEvent, dispatchEvent, ForgeEvent } from "./events";
 import type { Repo } from "./types";
 import type { RefStorage } from "./git/repository";
 import { lifecycle, collectDeleted, projectDefaultBranch } from "./lifecycle";
@@ -97,23 +87,15 @@ export class Repository extends DurableObject<Env> {
         shareableOperation(request),
         async (ready) => {
           admitted = performance.now();
-          await assertDeployGitRequest(this.env, request);
           return this.handle(request, ready);
         },
         snapshotRead(request)
           ? async () => {
               admitted = performance.now();
-              await assertDeployGitRequest(this.env, request);
               return this.handleSnapshot(request);
             }
           : undefined,
       );
-      try {
-        await assertDeployGitRequest(this.env, request);
-      } catch (e) {
-        await response.body?.cancel();
-        throw e;
-      }
       if (new URL(request.url).pathname === "/browse") {
         response.headers.append(
           "Server-Timing",
@@ -179,134 +161,9 @@ export class Repository extends DurableObject<Env> {
         );
         await this.ctx.storage.delete(key);
       }
-      for (const [key, event] of await this.ctx.storage.list<ForgeEvent>({
-        prefix: "event:",
-        limit: 20,
-      })) {
-        await dispatchEvent(this.env, event);
-        if (["push", "repo.sync.succeeded"].includes(event.event))
-          await this.ctx.storage.put("code-index", event.repository_id);
-        await this.ctx.storage.delete(key);
-      }
-      const queueRepo = await this.ctx.storage.get<string>("merge-queue");
-      if (queueRepo) {
-        await this.ctx.storage.setAlarm(Date.now() + 15000);
-        const live = await this.env.DB.prepare(
-          "SELECT * FROM repositories WHERE id=? AND deleted_at IS NULL",
-        )
-          .bind(queueRepo)
-          .first<Repo>();
-        if (!live || live.archived_at)
-          await this.ctx.storage.delete("merge-queue");
-        else
-          await this.handle(
-            new Request("http://repository/internal/merge-queue-tick", {
-              method: "POST",
-              headers: {
-                "x-repo-id": live.id,
-                "x-lifecycle-revision": String(live.lifecycle_revision),
-                "x-default-branch": live.default_branch,
-                "x-actor": "ZQ-CfGit merge queue",
-              },
-            }),
-          );
-      }
-      const codeRepo = await this.ctx.storage.get<string>("code-index");
-      if (codeRepo) {
-        await this.ctx.storage.setAlarm(Date.now() + 1000);
-        try {
-          const live = await this.env.DB.prepare(
-            "SELECT * FROM repositories WHERE id=? AND deleted_at IS NULL",
-          )
-            .bind(codeRepo)
-            .first<Repo>();
-          if (!live) await this.ctx.storage.delete("code-index");
-          else if (live.sync_status === "initializing")
-            await this.ctx.storage.setAlarm(Date.now() + 30000);
-          else {
-            // Prewarm after published push/sync events, before the heavier code
-            // index traversal. Cache failure cannot block index maintenance.
-            try {
-              const refs = (await this.ctx.storage.get<Refs>("refs.v2")) || {};
-              const target = refs["refs/heads/" + live.default_branch];
-              if (
-                target &&
-                target !== (await this.ctx.storage.get("browse-warmed.v1"))
-              ) {
-                const response = await this.handle(
-                  new Request("http://repository/browse", {
-                    headers: {
-                      "x-repo-id": live.id,
-                      "x-lifecycle-revision": String(live.lifecycle_revision),
-                      "x-default-branch": live.default_branch,
-                    },
-                  }),
-                );
-                await response.body?.cancel();
-                if (response.ok)
-                  await this.ctx.storage.put("browse-warmed.v1", target);
-              }
-            } catch {
-              /* The next foreground read can rebuild the disposable cache. */
-            }
-            await this.handle(
-              new Request("http://repository/internal/code-index-tick", {
-                method: "POST",
-                headers: {
-                  "x-repo-id": live.id,
-                  "x-lifecycle-revision": String(live.lifecycle_revision),
-                  "x-default-branch": live.default_branch,
-                },
-              }),
-            );
-          }
-          await this.ctx.storage.delete("code-index-failures");
-        } catch {
-          const attempts =
-            ((await this.ctx.storage.get<number>("code-index-failures")) || 0) +
-            1;
-          await this.ctx.storage.put("code-index-failures", attempts);
-          await this.ctx.storage.setAlarm(
-            Date.now() + Math.min(300000, 1000 * 2 ** Math.min(attempts, 9)),
-          );
-          await this.env.DB.prepare(
-            "UPDATE code_index_state SET status='failed',error='Index update temporarily unavailable; automatic retry pending',checked_at=? WHERE repo_id=?",
-          )
-            .bind(Date.now(), codeRepo)
-            .run();
-        }
-      }
-      const id = await this.ctx.storage.get<string>("sync-reconcile");
-      if (
-        id &&
-        ((await this.ctx.storage.get<number>("sync-retries")) || 0) < 5
-      ) {
-        const metadata = await this.env.DB.prepare(
-          "SELECT * FROM repositories WHERE id=? AND deleted_at IS NULL",
-        )
-          .bind(id)
-          .first<Repo>();
-        if (metadata) {
-          try {
-            await pullRepository(
-              this.env,
-              this.ctx.storage,
-              metadata,
-              new ObjectStore(id, this.env.OBJECTS),
-            );
-            await this.ctx.storage.delete("sync-retries");
-          } catch {
-            const n =
-              ((await this.ctx.storage.get<number>("sync-retries")) || 0) + 1;
-            await this.ctx.storage.put("sync-retries", n);
-            if (n < 5) await this.ctx.storage.setAlarm(Date.now() + 300000);
-          }
-        }
-      }
       if (
         receipts.pending ||
         incomingPending ||
-        (await this.ctx.storage.list({ prefix: "event:", limit: 1 })).size ||
         (await this.ctx.storage.list({ prefix: "merge-projection:", limit: 1 }))
           .size
       )
@@ -343,11 +200,6 @@ export class Repository extends DurableObject<Env> {
           "Project moved or lifecycle changed; reload before reading or writing",
         );
       const ephemeral = request.headers.get("x-namespace") === "ephemeral";
-      if (!ephemeral && (await this.ctx.storage.get("sync-reconcile")))
-        fail(
-          409,
-          "Upstream outcome is being reconciled; pull upstream before reading",
-        );
       const defaultBranch = branch.parse(
         (await this.ctx.storage.get<string>("default-branch")) ||
           request.headers.get("x-default-branch") ||
@@ -460,10 +312,6 @@ export class Repository extends DurableObject<Env> {
           revision: z.number().int().min(0),
         })
         .parse(JSON.parse(text(await boundedBody(request, 4096))));
-      if (await this.ctx.storage.get("sync-reconcile"))
-        fail(409, "Reconcile upstream before changing project state");
-      if (metadata.sync_status === "initializing")
-        fail(409, "Project initialization is in progress");
       // Complete already-published merges before freezing D1 collaboration tables.
       for (const [key, pending] of await this.ctx.storage.list<{
         repo_id: string;
@@ -507,21 +355,6 @@ export class Repository extends DurableObject<Env> {
         ),
       );
     }
-    if (url.pathname === "/internal/sync" && request.method === "POST") {
-      if (!metadata) fail(404, "Repository not found");
-      return Response.json(
-        await pullRepository(this.env, this.ctx.storage, metadata, store),
-      );
-    }
-    if (
-      (await this.ctx.storage.get("sync-reconcile")) &&
-      url.pathname !== "/internal/delete" &&
-      request.headers.get("x-namespace") !== "ephemeral"
-    )
-      fail(
-        409,
-        "Upstream outcome is being reconciled; pull upstream before retrying",
-      );
     let refs = await this.ctx.storage.get<Refs>("refs.v2");
     if (!refs) {
       const legacy = await this.ctx.storage.get<string>("snapshot");
@@ -541,7 +374,6 @@ export class Repository extends DurableObject<Env> {
     const policy = JSON.parse(
       request.headers.get("x-write-policy") || '{"rules":[]}',
     );
-    let forwarded = false;
     let reviewedMerge: any = null;
     const publication: RefStorage = {
       get: <T>(key: string) => this.ctx.storage.get<T>(key),
@@ -570,16 +402,7 @@ export class Repository extends DurableObject<Env> {
           ...Object.keys(before),
           ...Object.keys(next),
         ]))
-          if (before[ref] !== next[ref]) {
-            refsUpdated++;
-            const event = forgeEvent(id, "push", {
-              ref,
-              before: before[ref] || "0".repeat(40),
-              after: next[ref] || "0".repeat(40),
-              actor: request.headers.get("x-actor") || null,
-            });
-            values["event:" + event.id] = event;
-          }
+          if (before[ref] !== next[ref]) refsUpdated++;
         if (
           request.method === "POST" &&
           url.pathname === "/git/git-receive-pack"
@@ -595,10 +418,6 @@ export class Repository extends DurableObject<Env> {
           );
         await this.ctx.storage.setAlarm(Date.now() + 1000);
         await putRefPublication(this.ctx.storage, values);
-        if (forwarded) {
-          await scheduleSync(this.env, metadata!);
-          await this.ctx.storage.delete(["sync-reconcile", "sync-retries"]);
-        }
       },
     };
     const select = namespaceRepositories(
@@ -607,34 +426,6 @@ export class Repository extends DurableObject<Env> {
       refs,
       defaultBranch,
       {
-        beforePublish: async (before, after, ephemeral) => {
-          if (reviewedMerge?.queue_entry && metadata)
-            await validateQueuePublication(
-              this.env,
-              metadata,
-              select(false),
-              reviewedMerge.queue_entry,
-            );
-          if (!ephemeral && metadata)
-            await protectRefs(
-              this.env,
-              metadata,
-              store,
-              before,
-              after,
-              reviewedMerge,
-            );
-          if (!metadata?.base_repo || ephemeral) return after;
-          const config = JSON.parse(metadata.base_repo);
-          if (config.provider === "github" && config.mode === "public")
-            return after;
-          const client = await upstreamClient(this.env, metadata);
-          await this.ctx.storage.put("sync-reconcile", id);
-          await this.ctx.storage.setAlarm(Date.now() + 1000);
-          await client.push(store, before, after);
-          forwarded = true;
-          return after;
-        },
         rules: normalizePolicies(policy.rules),
         allowForce: policy.allowForce === true,
         signingKeys: async () =>
@@ -650,89 +441,6 @@ export class Repository extends DurableObject<Env> {
     const ephemeral = request.headers.get("x-namespace") === "ephemeral",
       repo = select(ephemeral),
       path = url.pathname;
-    if (path === "/internal/code-index-wake" && request.method === "POST") {
-      await this.ctx.storage.put("code-index", id);
-      await this.ctx.storage.setAlarm(Date.now() + 1000);
-      return Response.json({ scheduled: true });
-    }
-    if (path === "/internal/code-index-tick" && request.method === "POST") {
-      if (!metadata) fail(404, "Repository not found");
-      const pending = await advanceCodeIndex(this.env, metadata, repo);
-      if (!pending) await this.ctx.storage.delete("code-index");
-      return Response.json({ pending });
-    }
-    if (path === "/internal/merge-queue-tick" && request.method === "POST") {
-      if (!metadata) fail(404, "Repository not found");
-      await advanceQueue(
-        this.env,
-        this.ctx.storage,
-        metadata,
-        repo,
-        async (entry, mr) => {
-          reviewedMerge = {
-            ...mr,
-            actor_id: entry.actor_id,
-            queue_entry: entry,
-            issue_ids: await plannedIssueClosures(
-              this.env,
-              metadata,
-              mr,
-              store,
-              defaultBranch,
-            ),
-          };
-          await repo.publish({
-            ...repo.refs,
-            ["refs/heads/" + mr.target]: entry.candidate_sha!,
-          });
-          await projectMerge(this.env, id, mr.id, {
-            sha: entry.candidate_sha!,
-            actor_id: entry.actor_id,
-            issue_ids: reviewedMerge.issue_ids,
-            queue_id: entry.id,
-          });
-          await this.ctx.storage.delete("merge-projection:" + mr.id);
-        },
-      );
-      return Response.json({ ok: true });
-    }
-    if (
-      [
-        "/internal/merge-queue-enqueue",
-        "/internal/merge-queue-cancel",
-      ].includes(path) &&
-      request.method === "POST"
-    ) {
-      if (!metadata) fail(404, "Repository not found");
-      const body = JSON.parse(text(await boundedBody(request, 8192)));
-      const key = z.number().int().positive().parse(body.id);
-      const mrId = path.endsWith("enqueue")
-        ? key
-        : (
-            await this.env.DB.prepare(
-              "SELECT mr_id FROM merge_queue WHERE id=? AND repo_id=?",
-            )
-              .bind(key, id)
-              .first<{ mr_id: number }>()
-          )?.mr_id;
-      const completed = mrId
-        ? await this.ctx.storage.get<MergeResult>("merge-result:" + mrId)
-        : undefined;
-      if (completed) {
-        await projectMerge(this.env, id, mrId!, completed);
-        fail(409, "Merge request already merged");
-      }
-      return Response.json(
-        await queueMutation(
-          this.env,
-          this.ctx.storage,
-          metadata,
-          repo,
-          path.endsWith("cancel") ? "cancel" : "enqueue",
-          body,
-        ),
-      );
-    }
     if (path === "/review-context" && request.method === "GET") {
       const metadata = await this.env.DB.prepare(
         "SELECT * FROM repositories WHERE id=? AND deleted_at IS NULL",
@@ -757,20 +465,6 @@ export class Repository extends DurableObject<Env> {
           defaultBranch,
         ),
       });
-    }
-    if (path === "/internal/merge-import" && request.method === "POST") {
-      if (!metadata) fail(404, "Repository unavailable");
-      const b = z
-        .object({
-          source_id: z.string().uuid(),
-          source_sha: z.string().regex(/^[a-f0-9]{40}$/),
-          actor_id: z.string(),
-          refresh: z.boolean().optional(),
-        })
-        .parse(JSON.parse(text(await boundedBody(request, 8192))));
-      return Response.json(
-        await importContribution(this.env, repo, metadata, b),
-      );
     }
     if (
       [
@@ -815,14 +509,6 @@ export class Repository extends DurableObject<Env> {
         return Response.json(result);
       }
       if (mr.state !== "open") fail(409, "Merge request closed");
-      if (
-        await this.env.DB.prepare(
-          "SELECT branch FROM branch_protections WHERE repo_id=? AND branch=? AND require_queue=1",
-        )
-          .bind(id, mr.target)
-          .first()
-      )
-        fail(403, "Protected branch requires the merge queue");
       if (body.revision !== mr.revision)
         fail(409, "Merge request changed; reload before merging");
       if (
@@ -872,8 +558,6 @@ export class Repository extends DurableObject<Env> {
     }
     const life = await lifecycle(request, repo, this.env, this.ctx.storage);
     if (life) return life;
-    if (metadata?.sync_status === "initializing")
-      fail(409, "Repository initialization is in progress");
     const q = Object.fromEntries(url.searchParams),
       page = { limit: q.limit, cursor: q.cursor };
     if (request.method === "GET" && path === "/tree-updates")

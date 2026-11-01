@@ -13,7 +13,7 @@ export function canonicalPageURL(
   } catch {
     return null;
   }
-  if (/^\/(api|mcp|webhooks)(\/|$)/.test(pathname) || pathname.includes(".git"))
+  if (/^\/(api|mcp)(\/|$)/.test(pathname) || pathname.includes(".git"))
     return null;
   const destination = new URL(canonical);
   destination.pathname = url.pathname;

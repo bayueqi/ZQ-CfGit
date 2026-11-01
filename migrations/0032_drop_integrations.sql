@@ -1,0 +1,12 @@
+DROP TRIGGER IF EXISTS deploy_tokens_transfer;
+DROP TRIGGER IF EXISTS password_recovery_revoke;
+DROP TABLE IF EXISTS deliveries;
+DROP TABLE IF EXISTS webhooks;
+DROP TABLE IF EXISTS incoming_webhooks;
+DROP TABLE IF EXISTS git_credentials;
+DROP TABLE IF EXISTS sync_jobs;
+DROP TABLE IF EXISTS deploy_tokens;
+DROP TABLE IF EXISTS branch_protections;
+DROP TABLE IF EXISTS mfa_recovery;
+DROP TABLE IF EXISTS user_mfa;
+DROP TABLE IF EXISTS password_recovery;

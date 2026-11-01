@@ -1,29 +1,12 @@
 import type { Env, Repo } from "./types";
 import { repositoryRole, roleRank } from "./access";
-import { fail } from "./security";
-import { ObjectStore, type Refs } from "./git/objects";
-import { codeownerGate } from "./codeowners";
-export interface Protection {
-  branch: string;
-  require_mr: number;
-  approvals: number;
-  require_ci: number;
-  require_resolved?: number;
-  require_codeowners?: number;
-  require_queue?: number;
-}
+import type { ObjectStore } from "./git/objects";
 export async function reviewGate(
   env: Env,
   repo: Repo,
   mr: any,
-  store?: ObjectStore,
-  options: { skipCI?: boolean; queueRun?: { id: string; sha: string } } = {},
+  _store?: ObjectStore,
 ) {
-  const rule = await env.DB.prepare(
-    "SELECT * FROM branch_protections WHERE repo_id=? AND branch=?",
-  )
-    .bind(repo.id, mr.target)
-    .first<Protection>();
   const reviews = (
     await env.DB.prepare(
       "SELECT v.*,u.username,u.admin,u.disabled FROM merge_reviews v JOIN users u ON u.id=v.user_id WHERE mr_id=? ORDER BY v.id DESC LIMIT 200",
@@ -31,8 +14,7 @@ export async function reviewGate(
       .bind(mr.id)
       .all<any>()
   ).results;
-  const seen = new Set<string>(),
-    approved = new Set<string>();
+  const seen = new Set<string>();
   let approvals = 0,
     changes = 0;
   const decisions = (
@@ -63,22 +45,9 @@ export async function reviewGate(
       ] < 2
     )
       continue;
-    if (r.verdict === "approve") {
-      approvals++;
-      approved.add(r.user_id);
-    } else changes++;
+    if (r.verdict === "approve") approvals++;
+    else changes++;
   }
-  const ci = options.queueRun
-    ? await env.DB.prepare(
-        "SELECT id,status FROM ci_runs WHERE id=? AND repo_id=? AND sha=? AND parent_id IS NULL AND trigger='merge_request'",
-      )
-        .bind(options.queueRun.id, repo.id, options.queueRun.sha)
-        .first<any>()
-    : await env.DB.prepare(
-        "SELECT id,status FROM ci_runs WHERE repo_id=? AND sha=? AND parent_id IS NULL ORDER BY rowid DESC LIMIT 1",
-      )
-        .bind(repo.id, mr.source_sha)
-        .first<any>();
   const unresolved =
     (
       await env.DB.prepare(
@@ -94,98 +63,14 @@ export async function reviewGate(
         .first<{ n: number }>()
     )?.n || 0;
   const reasons: string[] = [];
-  if (rule?.require_resolved && unresolved)
-    reasons.push("Unresolved discussions: " + unresolved);
   if (changes) reasons.push("Reviewer requested changes");
-  if (approvals < (rule?.approvals || 0))
-    reasons.push("Required approvals: " + rule!.approvals);
-  if (
-    !options.skipCI &&
-    (rule?.require_ci || options.queueRun) &&
-    ci?.status !== "succeeded"
-  )
-    reasons.push(
-      options.queueRun
-        ? "Queue candidate pipeline must succeed"
-        : "Latest pipeline for this source commit must succeed",
-    );
-  const codeowners = rule?.require_codeowners
-    ? await codeownerGate(
-        env,
-        repo,
-        mr,
-        approved,
-        store || new ObjectStore(repo.id, env.OBJECTS),
-      )
-    : null;
-  if (codeowners && !codeowners.allowed) {
-    reasons.push(...codeowners.errors.map((e) => "CODEOWNERS: " + e));
-    for (const r of codeowners.requirements)
-      if (!r.allowed)
-        reasons.push(
-          `CODEOWNERS ${r.section} (${r.pattern}): ${r.approved.length}/${r.required} approvals${r.eligible.length ? "" : "; no eligible independent owners"}`,
-        );
-  }
   return {
-    codeowners,
-    rule,
     unresolved,
     approvals,
     changes,
-    ci,
+    ci: null,
     reviews: reviews.map(({ admin, disabled, ...review }) => review),
     reasons,
     allowed: !reasons.length,
   };
-}
-export async function protectRefs(
-  env: Env,
-  repo: Repo,
-  store: ObjectStore,
-  before: Refs,
-  after: Refs,
-  merge?: any,
-) {
-  const rules = (
-    await env.DB.prepare("SELECT * FROM branch_protections WHERE repo_id=?")
-      .bind(repo.id)
-      .all<Protection>()
-  ).results;
-  for (const rule of rules) {
-    const ref = "refs/heads/" + rule.branch,
-      old = before[ref],
-      next = after[ref];
-    if (old === next) continue;
-    if (!next) fail(403, "Protected branch cannot be deleted: " + rule.branch);
-    if (old && !(await store.ancestor(old, next)))
-      fail(403, "Protected branch rejects force push: " + rule.branch);
-    if (
-      rule.require_mr ||
-      rule.approvals ||
-      rule.require_ci ||
-      rule.require_resolved ||
-      rule.require_codeowners ||
-      rule.require_queue
-    ) {
-      if (!merge || merge.target !== rule.branch)
-        fail(
-          403,
-          "Protected branch requires a reviewed merge request: " + rule.branch,
-        );
-      if (rule.require_queue && !merge.queue_entry)
-        fail(403, "Protected branch requires the merge queue: " + rule.branch);
-      if (merge.queue_entry && merge.queue_entry.candidate_sha !== next)
-        fail(409, "Queue must publish the tested candidate");
-      const gate = await reviewGate(
-        env,
-        repo,
-        merge,
-        store,
-        merge.queue_entry
-          ? { queueRun: { id: merge.queue_entry.run_id, sha: next } }
-          : {},
-      );
-      if (!gate.allowed) fail(409, gate.reasons.join("; "));
-    }
-  }
 }
