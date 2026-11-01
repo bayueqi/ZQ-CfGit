@@ -2,9 +2,9 @@ import {
   text as i18nText,
   html as i18nHTML,
   getLocale,
-} from "./i18n.js?v=362799ab65ad23c5";
-import { cachePanel } from "./ci-cache.js?v=053546286a152962";
-import { variablePanel } from "./ci-variables.js?v=e433500c3c2c9b71";
+} from "./i18n.js?v=2c1347ec7cec9b8a";
+import { cachePanel } from "./ci-cache.js?v=1d9c89346dd2310f";
+import { variablePanel } from "./ci-variables.js?v=592a89d7219125bb";
 const roleNames = {
   reader: i18nText("只读"),
   developer: i18nText("开发者"),

@@ -3,7 +3,7 @@ import {
   html as i18nHTML,
   getLocale,
   state as i18nState,
-} from "./i18n.js?v=362799ab65ad23c5";
+} from "./i18n.js?v=2c1347ec7cec9b8a";
 const button = (text, action, id = "") =>
   `<button type="button" class="btn small" data-collab="${action}" data-id="${id}">${text}</button>`;
 function actions(h, fn) {

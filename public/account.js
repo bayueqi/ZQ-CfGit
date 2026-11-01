@@ -1,8 +1,10 @@
 import {
   text as i18nText,
   html as i18nHTML,
+  action as i18nAction,
+  visibility as i18nVisibility,
   getLocale,
-} from "./i18n.js?v=362799ab65ad23c5";
+} from "./i18n.js?v=2c1347ec7cec9b8a";
 let hasPassword = true;
 const passwordInput = () =>
   hasPassword
@@ -156,7 +158,7 @@ export function recoverPasswordPage(h) {
   });
 }
 export async function profilePage(h, name) {
-  const { api, layout, esc } = h,
+  const { api, layout, esc, icon } = h,
     q = new URLSearchParams(location.search),
     d = await api(
       "/profiles/" +
@@ -166,9 +168,16 @@ export async function profilePage(h, name) {
           : ""),
     );
   if (!h.current()) return;
-  const p = d.profile;
+  const p = d.profile,
+    detail = (a) => {
+      const v = (a.detail || "").trim();
+      if (!v || v === "{}" || v.startsWith("{")) return "";
+      return a.action === "repo.update" ? i18nVisibility(v) : v;
+    },
+    repoRow = (r) => `<div class="repo-row"><div class="repo-icon">${icon("repo")}</div><div class="repo-info"><a data-link class="repo-name" href="/${esc(r.namespace)}/${encodeURIComponent(r.name)}"><span class="namespace">${esc(r.namespace)} / </span>${esc(r.name)}</a><p>${esc(r.description || i18nText("这个项目还没有描述。"))}</p></div><span class="pill">${esc(i18nVisibility(r.visibility))}</span></div>`,
+    activityRow = (a) => `<div class="token-row"><div><a data-link href="/${esc(a.namespace)}/${encodeURIComponent(a.name)}">${esc(a.namespace)}/${esc(a.name)}</a><p>${esc(i18nAction(a.action))}${detail(a) ? " · " + esc(detail(a)) : ""}</p></div><span>${esc(a.created_at)}</span></div>`;
   layout(
-    i18nHTML`<div class="titlebar"><h1>${esc(p.username)}</h1></div><section class="panel"><div class="panelhead"><h2>项目</h2></div>${d.repositories.map((r) => `<div class="repo-row"><a data-link href="/${esc(r.namespace)}/${encodeURIComponent(r.name)}">${esc(r.name)}</a><p>${esc(r.description)}</p><span>${esc(r.visibility)}</span></div>`).join("") || i18nText('<div class="empty">暂无可见项目</div>')}</section><section class="panel"><div class="panelhead"><h2>活动</h2></div>${d.activity.map((a) => `<div class="token-row"><div><a data-link href="/${esc(a.namespace)}/${encodeURIComponent(a.name)}">${esc(a.namespace)}/${esc(a.name)}</a><p>${esc(a.action)} · ${esc(a.detail)}</p></div><span>${esc(a.created_at)}</span></div>`).join("") || i18nText('<div class="empty">暂无可见活动</div>')}${d.next ? i18nHTML`<a data-link class="btn" href="/profile?user=${esc(name)}&before=${d.next}">更早的活动</a>` : ""}</section>`,
+    i18nHTML`<div class="titlebar"><div><h1>${esc(p.username)}</h1><p class="muted">${esc(p.created_at)} 已加入</p></div></div><section class="panel"><div class="panelhead"><strong>项目</strong><span class="muted">${d.repositories.length} 个</span></div>${d.repositories.map(repoRow).join("") || `<div class="empty"><p>${i18nText("暂无可见项目")}</p></div>`}</section><section class="panel"><div class="panelhead"><strong>活动</strong><span class="muted">最近 ${d.activity.length} 条</span></div>${d.activity.map(activityRow).join("") || `<div class="empty"><p>${i18nText("暂无可见活动")}</p></div>`}${d.next ? i18nHTML`<div class="token-row"><a data-link class="btn small" href="/profile?user=${esc(name)}&before=${d.next}">更早的活动</a></div>` : ""}</section>`,
     i18nText("我的动态"),
   );
 }
