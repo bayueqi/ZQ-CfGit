@@ -3,7 +3,8 @@ import {
   html as i18nHTML,
   getLocale,
   state as i18nState,
-} from "./i18n.js?v=2c1347ec7cec9b8a";
+  datetime as i18nTime,
+} from "./i18n.js?v=3ff186564b930e02";
 const button = (text, action, id = "") =>
   `<button type="button" class="btn small" data-collab="${action}" data-id="${id}">${text}</button>`;
 function actions(h, fn) {
@@ -205,7 +206,7 @@ export async function projectPage(r, base, ap, h, tab, sub) {
     repoLayout(
       r,
       "deployments",
-      i18nHTML`<div class="titlebar"><h2>Cloudflare 应用发布</h2></div><div class="panel"><div class="detail-body"><p>成功流水线生成不可变版本。激活版本即可发布；选择历史版本即可回滚。启用公开访问后，任何人都能访问应用。</p></div>${d.environments.map((e) => `<div class="token-row"><div><strong>${esc(e.name)}</strong><p>${e.deployment_id ? e.deployment_id.slice(0, 8) : i18nText("尚未激活")} · ${e.public ? i18nText("公开") : i18nText("未公开")}</p>${e.public && e.deployment_id ? i18nHTML`<a target="_blank" rel="noopener noreferrer" href="${esc(e.url)}">打开应用 ↗</a>` : ""}</div>${maintain(r) && e.deployment_id ? button(i18nText("停止公开访问"), "unpublish", esc(e.name)) : ""}</div>`).join("")}</div><div class="panel"><div class="panelhead"><strong>可用版本</strong></div>${d.deployments.map((x) => i18nHTML`<div class="token-row"><div><strong>${esc(x.environment)}</strong> · <code>${x.sha.slice(0, 12)}</code><p>${esc(x.created_at)} · <a data-link href="${base}/ci/${x.run_id}">流水线</a></p></div>${maintain(r) ? button(i18nText("激活并公开此版本"), "activate", x.id) : ""}</div>`).join("") || i18nText('<div class="empty">在 Worker 流水线中添加 deploy 配置。</div>')}</div>`,
+      i18nHTML`<div class="titlebar"><h2>Cloudflare 应用发布</h2></div><div class="panel"><div class="detail-body"><p>成功流水线生成不可变版本。激活版本即可发布；选择历史版本即可回滚。启用公开访问后，任何人都能访问应用。</p></div>${d.environments.map((e) => `<div class="token-row"><div><strong>${esc(e.name)}</strong><p>${e.deployment_id ? e.deployment_id.slice(0, 8) : i18nText("尚未激活")} · ${e.public ? i18nText("公开") : i18nText("未公开")}</p>${e.public && e.deployment_id ? i18nHTML`<a target="_blank" rel="noopener noreferrer" href="${esc(e.url)}">打开应用 ↗</a>` : ""}</div>${maintain(r) && e.deployment_id ? button(i18nText("停止公开访问"), "unpublish", esc(e.name)) : ""}</div>`).join("")}</div><div class="panel"><div class="panelhead"><strong>可用版本</strong></div>${d.deployments.map((x) => i18nHTML`<div class="token-row"><div><strong>${esc(x.environment)}</strong> · <code>${x.sha.slice(0, 12)}</code><p>${i18nTime(x.created_at)} · <a data-link href="${base}/ci/${x.run_id}">流水线</a></p></div>${maintain(r) ? button(i18nText("激活并公开此版本"), "activate", x.id) : ""}</div>`).join("") || i18nText('<div class="empty">在 Worker 流水线中添加 deploy 配置。</div>')}</div>`,
     );
     actions(h, async (a, id) => {
       const dep = d.deployments.find((x) => x.id === id),

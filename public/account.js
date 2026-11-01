@@ -2,9 +2,10 @@ import {
   text as i18nText,
   html as i18nHTML,
   action as i18nAction,
+  datetime as i18nTime,
   visibility as i18nVisibility,
   getLocale,
-} from "./i18n.js?v=2c1347ec7cec9b8a";
+} from "./i18n.js?v=3ff186564b930e02";
 let hasPassword = true;
 const passwordInput = () =>
   hasPassword
@@ -41,7 +42,7 @@ export async function securityPage(h) {
   if (!h.current()) return;
   hasPassword = true;
   layout(
-    i18nHTML`<div class="titlebar"><div><h1>账户安全</h1><p>保护登录凭据，查看和撤销浏览器会话。</p></div><span class="pill">${security.enabled ? i18nText("双重验证已启用") : i18nText("尚未启用双重验证")}</span></div><section class="panel"><div class="form"><h2>身份验证器</h2><p>支持使用六位 TOTP 验证码的身份验证器。Git HTTPS 和 API 继续使用访问令牌。</p>${security.enabled ? i18nHTML`<p>剩余 ${security.recovery_codes_remaining} 个一次性恢复码。</p><form id="rotate-recovery">${passwordInput()}${otpInput()}<button class="btn" type="submit">重新生成恢复码</button></form><details><summary>关闭双重验证</summary><form id="disable-mfa">${passwordInput()}${otpInput()}<button type="submit" class="btn danger">关闭双重验证</button></form></details>` : i18nHTML`<form id="setup-mfa">${passwordInput()}<button class="btn primary" type="submit">设置身份验证器</button></form>`}<div id="enrollment"></div><div id="recovery-result" role="status"></div></div></section><section class="panel"><div class="panelhead"><h2>浏览器会话</h2></div>${sessions.map((s) => i18nHTML`<div class="token-row"><div><strong>${s.current ? i18nText("当前会话") : i18nText("其他会话")}</strong><p>${esc(s.created_at)} · 到期 ${new Date(s.expires_at).toLocaleString(getLocale())}</p></div><button class="btn small" type="button" data-session="${s.id}">${s.current ? i18nText("退出当前会话") : i18nText("撤销")}</button></div>`).join("")}</section>`,
+    i18nHTML`<div class="titlebar"><div><h1>账户安全</h1><p>保护登录凭据，查看和撤销浏览器会话。</p></div><span class="pill">${security.enabled ? i18nText("双重验证已启用") : i18nText("尚未启用双重验证")}</span></div><section class="panel"><div class="form"><h2>身份验证器</h2><p>支持使用六位 TOTP 验证码的身份验证器。Git HTTPS 和 API 继续使用访问令牌。</p>${security.enabled ? i18nHTML`<p>剩余 ${security.recovery_codes_remaining} 个一次性恢复码。</p><form id="rotate-recovery">${passwordInput()}${otpInput()}<button class="btn" type="submit">重新生成恢复码</button></form><details><summary>关闭双重验证</summary><form id="disable-mfa">${passwordInput()}${otpInput()}<button type="submit" class="btn danger">关闭双重验证</button></form></details>` : i18nHTML`<form id="setup-mfa">${passwordInput()}<button class="btn primary" type="submit">设置身份验证器</button></form>`}<div id="enrollment"></div><div id="recovery-result" role="status"></div></div></section><section class="panel"><div class="panelhead"><h2>浏览器会话</h2></div>${sessions.map((s) => i18nHTML`<div class="token-row"><div><strong>${s.current ? i18nText("当前会话") : i18nText("其他会话")}</strong><p>${i18nTime(s.created_at)} · 到期 ${i18nTime(new Date(s.expires_at).toISOString())}</p></div><button class="btn small" type="button" data-session="${s.id}">${s.current ? i18nText("退出当前会话") : i18nText("撤销")}</button></div>`).join("")}</section>`,
     i18nText("账户安全"),
     "account",
   );
@@ -144,6 +145,7 @@ export function recoverPasswordPage(h) {
   h.layout(
     i18nHTML`<div class="titlebar"><h1>找回密码</h1></div><section class="panel form"><p>输入此前保存在安全位置的一次性密码恢复密钥。已启用双重验证的账户，还需提供验证码或 MFA 恢复码。</p><form id="recover-password"><div class="field"><label>用户名<input name="username" required maxlength="48" autocomplete="username"></label></div><div class="field"><label>密码恢复密钥<input name="key" type="password" required maxlength="100" autocomplete="off" spellcheck="false" placeholder="osr_…"></label></div><div class="field"><label>新密码<input name="new_password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label></div><div class="field"><label>确认新密码<input name="confirm_password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label></div><div class="field"><label>双重验证（已启用时填写）<input name="otp" maxlength="64" autocomplete="one-time-code" placeholder="验证码或 MFA 恢复码"></label></div><p class="hint">完成后旧会话、个人令牌和 JWT 委托密钥全部撤销。项目和双重验证保留。</p><button type="submit" class="btn primary">重设密码</button></form><div id="password-reset-result" role="status"></div><p><a data-link href="/login">返回登录</a></p><details><summary>没有保存恢复密钥？</summary><p>可使用已关联的统一登录进入账户后修改密码，或联系部署管理员核验身份。MFA 恢复码仅替代第二因子，不能单独重设密码。</p></details></section>`,
     i18nText("找回密码"),
+    "auth",
   );
   h.bindForm("#recover-password", async (b) => {
     if (b.new_password !== b.confirm_password)
@@ -175,9 +177,10 @@ export async function profilePage(h, name) {
       return a.action === "repo.update" ? i18nVisibility(v) : v;
     },
     repoRow = (r) => `<div class="repo-row"><div class="repo-icon">${icon("repo")}</div><div class="repo-info"><a data-link class="repo-name" href="/${esc(r.namespace)}/${encodeURIComponent(r.name)}"><span class="namespace">${esc(r.namespace)} / </span>${esc(r.name)}</a><p>${esc(r.description || i18nText("这个项目还没有描述。"))}</p></div><span class="pill">${esc(i18nVisibility(r.visibility))}</span></div>`,
-    activityRow = (a) => `<div class="token-row"><div><a data-link href="/${esc(a.namespace)}/${encodeURIComponent(a.name)}">${esc(a.namespace)}/${esc(a.name)}</a><p>${esc(i18nAction(a.action))}${detail(a) ? " · " + esc(detail(a)) : ""}</p></div><span>${esc(a.created_at)}</span></div>`;
+    activityRow = (a) => `<div class="token-row"><div><a data-link href="/${esc(a.namespace)}/${encodeURIComponent(a.name)}">${esc(a.namespace)}/${esc(a.name)}</a><p>${esc(i18nAction(a.action))}${detail(a) ? " · " + esc(detail(a)) : ""}</p></div><span>${i18nTime(a.created_at)}</span></div>`;
   layout(
-    i18nHTML`<div class="titlebar"><div><h1>${esc(p.username)}</h1><p class="muted">${esc(p.created_at)} 已加入</p></div></div><section class="panel"><div class="panelhead"><strong>项目</strong><span class="muted">${d.repositories.length} 个</span></div>${d.repositories.map(repoRow).join("") || `<div class="empty"><p>${i18nText("暂无可见项目")}</p></div>`}</section><section class="panel"><div class="panelhead"><strong>活动</strong><span class="muted">最近 ${d.activity.length} 条</span></div>${d.activity.map(activityRow).join("") || `<div class="empty"><p>${i18nText("暂无可见活动")}</p></div>`}${d.next ? i18nHTML`<div class="token-row"><a data-link class="btn small" href="/profile?user=${esc(name)}&before=${d.next}">更早的活动</a></div>` : ""}</section>`,
+    i18nHTML`<div class="titlebar"><div><h1>${esc(p.username)}</h1><p class="muted">${i18nTime(p.created_at)} 已加入</p></div></div><section class="panel"><div class="panelhead"><strong>项目</strong><span class="muted">${d.repositories.length} 个</span></div>${d.repositories.map(repoRow).join("") || `<div class="empty"><p>${i18nText("暂无可见项目")}</p></div>`}</section><section class="panel"><div class="panelhead"><strong>活动</strong><span class="muted">最近 ${d.activity.length} 条</span></div>${d.activity.map(activityRow).join("") || `<div class="empty"><p>${i18nText("暂无可见活动")}</p></div>`}${d.next ? i18nHTML`<div class="token-row"><a data-link class="btn small" href="/profile?user=${esc(name)}&before=${d.next}">更早的活动</a></div>` : ""}</section>`,
     i18nText("我的动态"),
+    "profile",
   );
 }

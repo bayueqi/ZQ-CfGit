@@ -2,21 +2,22 @@ import {
   text as i18nText,
   html as i18nHTML,
   getLocale,
+  datetime as i18nTime,
   errorText,
   relativeTime,
   state as i18nState,
-} from "./i18n.js?v=2c1347ec7cec9b8a";
-const globalSearch = () => import("./search.js?v=a5646b998b099fce");
-const deployTokens = () => import("./deploy-tokens.js?v=a31ffe5f251d2fe1");
-const packages = () => import("./packages.js?v=6d82569732b810cb");
-const account = () => import("./account.js?v=a655375bc6bd194c");
-const collaboration = () => import("./collaboration.js?v=3afa14cb05ec0873");
-const platform = () => import("./manage.js?v=b02d3690e3bfd9ad");
+} from "./i18n.js?v=3ff186564b930e02";
+const globalSearch = () => import("./search.js?v=af382007a7a5ee1f");
+const deployTokens = () => import("./deploy-tokens.js?v=1760aef45c5640a9");
+const packages = () => import("./packages.js?v=051f03a129b86eb2");
+const account = () => import("./account.js?v=e0bcfd152e6d3b60");
+const collaboration = () => import("./collaboration.js?v=dc11f85d43eb0f02");
+const platform = () => import("./manage.js?v=21bcd3e82f87db5b");
 import {
   keyPage,
   forgePage,
   upstreamPage,
-} from "./forge.js?v=3f6722d588f06a58";
+} from "./forge.js?v=65209f6c735e53bb";
 const root = document.querySelector("#app");
 const esc = (x) =>
   String(x ?? "").replace(
@@ -36,6 +37,9 @@ const icons = {
   branch: "M6 3v12a4 4 0 0 0 8 0V9 M3 3h6 M11 6h6v3h-6z",
   users:
     "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M17 4a4 4 0 0 1 0 7 M22 21v-2a4 4 0 0 0-3-4",
+  search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16 M21 21l-4.3-4.3",
+  link: "M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1 M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1",
+  shield: "M12 3l8 3v6c0 5-3.4 8.3-8 9.5C7.4 20.3 4 17 4 12V6z M9 12l2 2 4-4",
 };
 const icon = (name) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${icons[name] || icons.repo}"/></svg>`;
@@ -279,7 +283,9 @@ const link = (path, label, cls = "") =>
 function layout(content, crumb = i18nText("项目"), active = "repos") {
   const heading = (crumb || "").trim() || i18nText("项目");
   document.title = heading + " · ZQ-CfGit";
-  root.innerHTML = i18nHTML`<div class="layout"><aside class="sidebar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="workspace"><span class="avatar">${esc(user?.username[0].toUpperCase() || "Z")}</span><div>${esc(user?.username || "ZQ-CfGit")}</div></div><div class="eyebrow">项目</div><nav>${link("/search" + (selectedSpace ? "?namespace=" + encodeURIComponent(selectedSpace) : ""), icon("code") + i18nText("跨项目搜索"), `navlink ${active === "search" ? "active" : ""}`)}${link("/", icon("repo") + i18nText("项目"), `navlink ${active === "repos" ? "active" : ""}`)}${user ? link("/settings/tokens", icon("key") + i18nText("访问令牌"), `navlink ${active === "tokens" ? "active" : ""}`) : ""}${user ? link("/settings/keys", icon("key") + i18nText("密钥与连接"), `navlink ${active === "keys" ? "active" : ""}`) : ""}${user ? link("/settings/account", icon("key") + i18nText("账户安全"), "navlink") + link("/profile", icon("users") + i18nText("我的动态"), "navlink") : ""}</nav><footer>ZQ-CfGit</footer></aside><main class="main"><header class="topbar"><div class="breadcrumb"><span>${esc(heading)}</span></div><div class="right"><span class="pill">自托管</span>${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main></div>`;
+  const navItem = (path, ic, label, key) =>
+    link(path, icon(ic) + label, `navlink${active === key ? " active" : ""}`);
+  root.innerHTML = i18nHTML`<div class="layout"><aside class="sidebar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="workspace"><span class="avatar">${esc(user?.username[0].toUpperCase() || "Z")}</span><div>${esc(user?.username || "ZQ-CfGit")}</div></div><div class="eyebrow">项目</div><nav>${navItem("/search" + (selectedSpace ? "?namespace=" + encodeURIComponent(selectedSpace) : ""), "search", i18nText("跨项目搜索"), "search")}${navItem("/", "repo", i18nText("项目"), "repos")}${user ? navItem("/settings/tokens", "key", i18nText("访问令牌"), "tokens") : ""}${user ? navItem("/settings/keys", "link", i18nText("密钥与连接"), "keys") : ""}${user ? navItem("/settings/account", "shield", i18nText("账户安全"), "account") + navItem("/profile", "users", i18nText("我的动态"), "profile") : ""}</nav><footer>ZQ-CfGit</footer></aside><main class="main"><header class="topbar"><div class="breadcrumb"><span>${esc(heading)}</span></div><div class="right"><span class="pill">自托管</span>${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main></div>`;
   document.querySelector("#logout")?.addEventListener("click", async () => {
     await api("/logout", { method: "POST" });
     user = null;
@@ -478,7 +484,7 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
   if (notebook) {
     try {
       const { mountNotebook } =
-        await import("./notebook.js?v=bda4988333869df4");
+        await import("./notebook.js?v=396e4a78385b6a07");
       if (version !== routeVersion || !notebook.isConnected) return;
       mountNotebook(notebook, data.content, { base, ref: data.ref, path: p });
     } catch {
@@ -556,7 +562,7 @@ async function searchPage(r, base, ap, version) {
     "search",
     i18nHTML`<section class="panel" id="code-index-status"></section><form class="toolbar" id="code-search"><div class="search"><input name="q" value="${esc(q)}" required maxlength="128" placeholder="在默认分支搜索代码…" aria-label="搜索代码"></div><button class="btn primary" type="submit">搜索代码</button></form><div class="panel"><div class="panelhead"><strong>${result.matches.length} 处匹配</strong><span class="muted">${esc(r.default_branch)}${result.truncated ? i18nText(" · 仅显示前 200 条") : ""}</span></div>${result.matches.map((m) => `<div class="comment">${link(base + "?view=blob&path=" + encodeURIComponent(m.path), esc(m.path) + ":" + m.line)}<pre>${esc(m.text)}</pre></div>`).join("") || '<div class="empty"><p>' + (q ? i18nText("没有匹配的代码。") : i18nText("输入关键词，搜索仓库中的文本文件。")) + "</p></div>"}</div>`,
   );
-  const indexUI = await import("./search.js?v=a5646b998b099fce");
+  const indexUI = await import("./search.js?v=af382007a7a5ee1f");
   if (version !== routeVersion) return;
   indexUI.mountCodeIndex(document.querySelector("#code-index-status"), r, ap, {
     api,
@@ -661,7 +667,7 @@ async function issuesPage(r, base, ap, sub, version, helpers) {
     });
     return i;
   }
-  return (await import("./issues.js?v=c9e812bca84a8264")).issuesPage(
+  return (await import("./issues.js?v=a85f198b6cf1c1ab")).issuesPage(
     r,
     base,
     ap,
@@ -691,7 +697,7 @@ async function settingsPage(r, base, ap, version) {
   repoLayout(
     r,
     "settings",
-    i18nHTML`<p><a data-link href="${base}/deploy-tokens" class="btn">部署令牌</a></p><div class="stack">${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="project-lifecycle"><h2>${r.archived_at ? i18nText("恢复项目") : i18nText("归档项目")}</h2><p class="muted">归档后可继续 clone、下载和读取历史；停止写入及新流水线，取消正在执行的任务。已发布应用保留最后版本。恢复后，已取消任务需要手动重试。</p><button type="submit" class="btn">${r.archived_at ? i18nText("取消归档") : i18nText("归档为只读")}</button></form></div>` : ""}${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">转移或重命名项目</summary><form class="form" id="project-transfer">${field(i18nText("目标空间"), "namespace", "text", r.namespace, i18nText("填写你的个人空间或你拥有的团队空间名称。"))}${field(i18nText("目标项目名"), "name", "text", r.name)}<p class="muted">保留代码、Issues、MR、Wiki 与历史产物；显式项目成员保留，团队继承权限重新计算。跨空间转移会取消 CI 与同步，撤销 Runner、Git 连接及 Webhook，暂停自动流水线并关闭应用公开访问；目标空间需要重新配置后启用。同空间重命名保留连接、运行与发布状态。</p><label><input type="checkbox" required name="acknowledge">我已了解连接与发布状态的变更</label><button class="btn" type="submit">转移项目</button></form></details>` : ""}<div class="panel"><form class="form" id="repo-settings"><h2>项目设置</h2>${textarea(i18nText("项目描述"), "description", r.description)}${field(i18nText("默认分支"), "default_branch", "text", r.default_branch)}<div class="field"><label for="visibility">可见性</label><select name="visibility" id="visibility"><option value="private" ${r.visibility === "private" ? "selected" : ""}>私有 · 仅成员可访问</option><option value="public" ${r.visibility === "public" ? "selected" : ""}>公开 · 所有人可读取</option></select></div><button class="btn primary" type="submit">保存设置</button></form></div><div class="panel"><div class="panelhead"><strong>Webhook</strong><span class="muted">${webhooks.length} / 10</span></div>${webhooks.map((h) => i18nHTML`<div class="token-row"><span>${esc(h.url)}</span><button class="btn small danger" data-hook="${h.id}">移除</button></div>`).join("")}<form class="form" id="webhook"><p class="muted">接收地址须为管理员已允许的 HTTPS 主机。签名密钥仅在创建时显示一次。</p>${field(i18nText("接收地址"), "url", "url")}<button class="btn primary" type="submit">添加 Webhook</button><div id="hook-result"></div></form></div><div class="panel"><div class="panelhead"><strong>最近投递</strong></div>${deliveries.length ? deliveries.map((d) => i18nHTML`<div class="token-row"><code>${esc(d.id.slice(0, 8))}</code><span class="pill">${esc(i18nState(d.state))}</span><span class="muted">${d.attempts} 次尝试 · HTTP ${d.last_status || "—"}</span></div>`).join("") : i18nText('<div class="empty"><p>暂无投递记录。</p></div>')}</div><div class="panel"><div class="panelhead"><strong>审计记录</strong><span class="muted">最近 100 条</span></div>${events.map((e) => `<div class="token-row"><div><strong>${esc(e.action)}</strong><p class="muted">${esc(e.actor || "system")} · ${esc(e.detail)}</p></div><span class="muted">${date(e.created_at)}</span></div>`).join("")}</div></div>`,
+    i18nHTML`<p><a data-link href="${base}/deploy-tokens" class="btn">部署令牌</a></p><div class="stack">${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="project-lifecycle"><h2>${r.archived_at ? i18nText("恢复项目") : i18nText("归档项目")}</h2><p class="muted">归档后可继续 clone、下载和读取历史；停止写入及新流水线，取消正在执行的任务。已发布应用保留最后版本。恢复后，已取消任务需要手动重试。</p><button type="submit" class="btn">${r.archived_at ? i18nText("取消归档") : i18nText("归档为只读")}</button></form></div>` : ""}${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">转移或重命名项目</summary><form class="form" id="project-transfer">${field(i18nText("目标命名空间"), "namespace", "text", r.namespace, i18nText("填写用户名或分组路径，例如 zq 或 zq/tools。"))}${field(i18nText("目标项目名"), "name", "text", r.name)}<p class="muted">保留代码、Issues、MR、Wiki 与历史产物；显式项目成员保留，团队继承权限重新计算。跨空间转移会取消 CI 与同步，撤销 Runner、Git 连接及 Webhook，暂停自动流水线并关闭应用公开访问；目标空间需要重新配置后启用。同空间重命名保留连接、运行与发布状态。</p><label><input type="checkbox" required name="acknowledge">我已了解连接与发布状态的变更</label><button class="btn" type="submit">转移项目</button></form></details>` : ""}<div class="panel"><form class="form" id="repo-settings"><h2>项目设置</h2>${textarea(i18nText("项目描述"), "description", r.description)}${field(i18nText("默认分支"), "default_branch", "text", r.default_branch)}<div class="field"><label for="visibility">可见性</label><select name="visibility" id="visibility"><option value="private" ${r.visibility === "private" ? "selected" : ""}>私有 · 仅成员可访问</option><option value="public" ${r.visibility === "public" ? "selected" : ""}>公开 · 所有人可读取</option></select></div><button class="btn primary" type="submit">保存设置</button></form></div><div class="panel"><div class="panelhead"><strong>Webhook</strong><span class="muted">${webhooks.length} / 10</span></div>${webhooks.map((h) => i18nHTML`<div class="token-row"><span>${esc(h.url)}</span><button class="btn small danger" data-hook="${h.id}">移除</button></div>`).join("")}<form class="form" id="webhook"><p class="muted">接收地址须为管理员已允许的 HTTPS 主机。签名密钥仅在创建时显示一次。</p>${field(i18nText("接收地址"), "url", "url")}<button class="btn primary" type="submit">添加 Webhook</button><div id="hook-result"></div></form></div><div class="panel"><div class="panelhead"><strong>最近投递</strong></div>${deliveries.length ? deliveries.map((d) => i18nHTML`<div class="token-row"><code>${esc(d.id.slice(0, 8))}</code><span class="pill">${esc(i18nState(d.state))}</span><span class="muted">${d.attempts} 次尝试 · HTTP ${d.last_status || "—"}</span></div>`).join("") : i18nText('<div class="empty"><p>暂无投递记录。</p></div>')}</div><div class="panel"><div class="panelhead"><strong>审计记录</strong><span class="muted">最近 100 条</span></div>${events.map((e) => `<div class="token-row"><div><strong>${esc(e.action)}</strong><p class="muted">${esc(e.actor || "system")} · ${esc(e.detail)}</p></div><span class="muted">${date(e.created_at)}</span></div>`).join("")}</div></div>`,
   );
   bindForm("#project-transfer", async (data) => {
     const result = await api(ap + "/transfer", {
@@ -826,7 +832,13 @@ async function render() {
   layout(
     loadingContent(title),
     title,
-    path.startsWith("/settings/") ? segment : "repos",
+    path === "/search"
+      ? "search"
+      : path === "/profile"
+        ? "profile"
+        : path.startsWith("/settings/")
+          ? segment
+          : "repos",
   );
   primeRoute();
   try {

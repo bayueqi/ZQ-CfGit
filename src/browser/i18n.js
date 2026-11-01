@@ -30,6 +30,23 @@ const stateNames = {
   delivered: "已投递",
 };
 export const state = (value) => stateNames[value] || value;
+/** SQLite 存的是 UTC "YYYY-MM-DD HH:MM:SS"，统一转成本地时间展示。 */
+export const datetime = (value) => {
+  if (!value) return "";
+  const raw = String(value),
+    parsed = new Date(
+      /[TZz+]/.test(raw) ? raw : raw.replace(" ", "T") + "Z",
+    );
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleString(locale, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+};
 const actionNames = {
   "repo.create": "创建项目",
   "repo.update": "更新项目设置",
