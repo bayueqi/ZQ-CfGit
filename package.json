@@ -1,0 +1,60 @@
+{
+  "name": "zq-cfgit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Git hosting on Cloudflare Workers, R2 and Durable Objects",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:worker": "wrangler dev --config wrangler.local.jsonc",
+    "dev:build": "wrangler dev --config wrangler.build.jsonc --persist-to .wrangler/compiler",
+    "typecheck": "tsc --noEmit",
+    "build": "wrangler deploy --dry-run --outdir dist --config wrangler.local.jsonc",
+    "build:compiler": "wrangler deploy --dry-run --config wrangler.build.jsonc --outdir dist/compiler",
+    "deploy": "wrangler deploy",
+    "deploy:apps": "wrangler deploy --config wrangler.apps.jsonc",
+    "deploy:build": "wrangler deploy --config wrangler.build.jsonc",
+    "db:local": "wrangler d1 migrations apply DB --local --config wrangler.local.jsonc",
+    "db:remote": "wrangler d1 migrations apply DB --remote",
+    "source": "node scripts/source.mjs",
+    "predeploy": "npm run source",
+    "prebuild": "npm run source",
+    "format": "prettier --write src public scripts *.md *.json *.jsonc"
+  },
+  "dependencies": {
+    "cron-parser": "5.10.0",
+    "diff": "9.0.0",
+    "dompurify": "3.4.15",
+    "esbuild-wasm": "0.28.2",
+    "highlight.js": "^11.12.0",
+    "hono": "^4.13.7",
+    "jose": "^6.2.12",
+    "jsonc-parser": "3.3.1",
+    "markdown-it": "^15.0.1",
+    "node-diff3": "3.2.1",
+    "openpgp": "6.3.1",
+    "pako": "2.2.0",
+    "qrcode-generator": "^2.0.4",
+    "re2js": "2.8.6",
+    "resolve.exports": "2.0.3",
+    "semver": "7.8.5",
+    "tar": "^7.5.22",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260907.1",
+    "@types/markdown-it": "^14.2.0",
+    "@types/node": "^26.5.0",
+    "@types/pako": "^2.0.4",
+    "@types/semver": "7.8.0",
+    "acorn": "8.18.0",
+    "esbuild": "^0.28.2",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.129.1"
+  }
+}

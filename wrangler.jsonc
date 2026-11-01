@@ -1,0 +1,80 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zq-cfgit",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "services": [
+    {
+      "binding": "BUILDER",
+      "service": "zq-cfgit-build",
+    },
+  ],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "none",
+    "not_found_handling": "none",
+    "run_worker_first": true,
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+    "database_name": "zq-cfgit",
+    "database_id": "dc4ab57b-2741-4d57-8abf-cf60975a9c72",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "OBJECTS",
+      "bucket_name": "zq-cfgit-objects",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "REPOSITORIES",
+        "class_name": "Repository",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["Repository"],
+    },
+  ],
+  "observability": {
+    "enabled": true,
+  },
+  "queues": {
+    "producers": [
+      {
+        "binding": "EVENTS",
+        "queue": "zq-cfgit-events",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "zq-cfgit-events",
+        "max_batch_size": 5,
+        "max_batch_timeout": 1,
+        "max_retries": 5,
+      },
+    ],
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"],
+  },
+  "workers_dev": true,
+  "ai": {
+    "binding": "AI",
+  },
+  "vectorize": [
+    {
+      "binding": "CODE_VECTORS",
+      "index_name": "zq-cfgit-code",
+    },
+  ],
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zq-cfgit-apps",
+  "main": "src/apps-gateway.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+    "database_name": "zq-cfgit",
+    "database_id": "dc4ab57b-2741-4d57-8abf-cf60975a9c72",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "OBJECTS",
+      "bucket_name": "zq-cfgit-objects",
+    },
+  ],
+  "workers_dev": true,
+  "observability": {
+    "enabled": true,
+  },
+}
