@@ -2,9 +2,9 @@ import {
   text as i18nText,
   html as i18nHTML,
   getLocale,
-} from "./i18n.js?v=dfc50e379ed7fca0";
-import { cachePanel } from "./ci-cache.js?v=337d1908d34de7bf";
-import { variablePanel } from "./ci-variables.js?v=ff6aea27491a3a35";
+} from "./i18n.js?v=cc932df8f838287d";
+import { cachePanel } from "./ci-cache.js?v=cf2f4dab69416e0e";
+import { variablePanel } from "./ci-variables.js?v=318099da95607577";
 const roleNames = {
   reader: i18nText("只读"),
   developer: i18nText("开发者"),
@@ -102,23 +102,23 @@ export async function ciPage(r, base, ap, h, runId) {
   ]);
   if (!h.current()) return;
   const sample = {
-    name: "Build and deploy",
+    name: "构建并部署",
     runner: "external",
     branches: [r.default_branch],
     timeout_seconds: 900,
     steps: [
-      { type: "run", name: "Install", command: "npm ci" },
-      { type: "run", name: "Test", command: "npm test" },
+      { type: "run", name: "安装", command: "npm ci" },
+      { type: "run", name: "测试", command: "npm test" },
       {
         type: "run",
-        name: "Deploy to Cloudflare",
+        name: "部署到 Cloudflare",
         command: "npx wrangler deploy",
       },
     ],
     artifacts: [],
   };
   const cloudSample = {
-    name: "Cloudflare JavaScript / WASM",
+    name: "Cloudflare JavaScript / WASM 应用",
     runner: "worker",
     branches: [r.default_branch],
     timeout_seconds: 90,
@@ -138,7 +138,7 @@ export async function ciPage(r, base, ap, h, runId) {
     },
   };
   const buildSample = {
-    name: "Cloudflare TypeScript / npm build",
+    name: "Cloudflare TypeScript / npm 构建",
     runner: "worker",
     branches: [r.default_branch],
     timeout_seconds: 110,
@@ -159,7 +159,7 @@ export async function ciPage(r, base, ap, h, runId) {
     },
   };
   const workflowSample = {
-    name: "Parallel checks and Cloudflare build",
+    name: "并行检查与 Cloudflare 构建",
     runner: "workflow",
     branches: [r.default_branch],
     jobs: [
@@ -301,7 +301,7 @@ export async function ciPage(r, base, ap, h, runId) {
           a === "template-private-build"
             ? {
                 ...buildSample,
-                name: "Private npm cloud build",
+                name: "私有 npm 云端构建",
                 variables: ["PACKAGE_TOKEN"],
                 steps: buildSample.steps.map((s) => ({
                   ...s,
@@ -318,7 +318,7 @@ export async function ciPage(r, base, ap, h, runId) {
                   ? cloudSample
                   : a === "template-worker"
                     ? {
-                        name: "Repository checks",
+                        name: "仓库检查",
                         runner: "worker",
                         branches: [r.default_branch],
                         steps: [

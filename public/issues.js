@@ -2,7 +2,7 @@ import {
   text as i18nText,
   html as i18nHTML,
   getLocale,
-} from "./i18n.js?v=dfc50e379ed7fca0";
+} from "./i18n.js?v=cc932df8f838287d";
 const writable = (r) =>
   !r.archived_at && ["developer", "maintainer", "owner"].includes(r.role);
 const maintain = (r) =>
