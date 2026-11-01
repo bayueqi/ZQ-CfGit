@@ -386,7 +386,6 @@ function repoLayout(r, tab, content, actions = "") {
       ["wiki", "Wiki", "/wiki"],
       ["deployments", i18nText("应用发布"), "/deployments"],
       ["protect", i18nText("分支保护"), "/protect"],
-      ["members", i18nText("成员"), "/members"],
       ...(["owner", "maintainer"].includes(r.role)
         ? [
             ["settings", i18nText("设置"), "/settings"],
@@ -678,31 +677,6 @@ async function mergesPage(r, base, ap, sub, version) {
     current: () => version === routeVersion,
   });
 }
-async function membersPage(r, base, ap, version) {
-  const { members, inherited_members = [] } = await api(ap + "/members");
-  if (version !== routeVersion) return;
-  const maintain = ["owner", "maintainer"].includes(r.role);
-  repoLayout(
-    r,
-    "members",
-    i18nHTML`<div class="stack"><div class="panel"><div class="panelhead"><strong>项目成员</strong></div><div class="token-row"><strong>${esc(r.namespace)}</strong><span class="pill">${r.workspace_id ? i18nText("继承空间权限") : i18nText("所有者")}</span></div>${inherited_members.map((m) => i18nHTML`<div class="token-row"><strong>${esc(m.username)}</strong><span class="pill">${esc(m.role)} · 空间继承</span></div>`).join("")}${members.map((m) => `<div class="token-row"><strong>${esc(m.username)}</strong><div class="actionbar"><span class="pill">${esc(m.role)}</span>${maintain ? i18nHTML`<button class="btn small danger" data-remove="${esc(m.username)}">移除</button>` : ""}</div></div>`).join("")}</div>${maintain ? i18nHTML`<div class="panel"><form class="form" id="member"><h2>添加或更新成员</h2>${field(i18nText("用户名"), "username", "text", "", i18nText("用户须先由管理员创建账号。"))}<div class="field"><label for="role">项目角色</label><select id="role" name="role"><option value="reader">Reader · 读取代码</option><option value="developer">Developer · 推送代码</option><option value="maintainer">Maintainer · 合并与管理</option></select></div><button class="btn primary" type="submit">保存成员</button></form></div>` : ""}</div>`,
-  );
-  bindForm("#member", async (data) => {
-    await api(ap + "/members", { method: "PUT", body: data });
-    render();
-  });
-  document.querySelectorAll("[data-remove]").forEach(
-    (b) =>
-      (b.onclick = async () => {
-        try {
-          await api(ap + "/members/" + b.dataset.remove, { method: "DELETE" });
-          render();
-        } catch (e) {
-          notice(e.message);
-        }
-      }),
-  );
-}
 async function settingsPage(r, base, ap, version) {
   const [{ events }, { webhooks }, { deliveries }] = await Promise.all([
     api(ap + "/audit"),
@@ -955,7 +929,6 @@ async function render() {
       if (sub && issue && version === routeVersion)
         await (await collaboration()).issuePlanning(r, ap, helpers, issue);
     } else if (tab === "merges") await mergesPage(r, base, ap, sub, version);
-    else if (tab === "members") await membersPage(r, base, ap, version);
     else if (tab === "deploy-tokens")
       await (await deployTokens()).deployTokensPage(helpers, { r, base, ap });
     else if (tab === "settings") await settingsPage(r, base, ap, version);
