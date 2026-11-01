@@ -277,7 +277,9 @@ window.addEventListener("popstate", render);
 const link = (path, label, cls = "") =>
   `<a data-link href="${esc(path === "/" && user && selectedSpace ? "/?namespace=" + encodeURIComponent(selectedSpace) : path)}" class="${cls}">${label}</a>`;
 function layout(content, crumb = i18nText("项目"), active = "repos") {
-  root.innerHTML = i18nHTML`<div class="layout"><aside class="sidebar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="workspace"><span class="avatar">${esc(user?.username[0].toUpperCase() || "Z")}</span><div>${esc(user?.username || "ZQ-CfGit")}</div></div><div class="eyebrow">项目</div><nav>${link("/search" + (selectedSpace ? "?namespace=" + encodeURIComponent(selectedSpace) : ""), icon("code") + i18nText("跨项目搜索"), `navlink ${active === "search" ? "active" : ""}`)}${link("/", icon("repo") + i18nText("项目"), `navlink ${active === "repos" ? "active" : ""}`)}${user ? link("/settings/tokens", icon("key") + i18nText("访问令牌"), `navlink ${active === "tokens" ? "active" : ""}`) : ""}${user ? link("/settings/keys", icon("key") + i18nText("密钥与连接"), `navlink ${active === "keys" ? "active" : ""}`) : ""}${user ? link("/settings/account", icon("key") + i18nText("账户安全"), "navlink") + link("/profile", icon("users") + i18nText("我的动态"), "navlink") : ""}</nav><footer>ZQ-CfGit</footer></aside><main class="main"><header class="topbar"><div class="breadcrumb">${link("/", i18nText("项目"))}${crumb === i18nText("项目") ? "" : `<span>/</span><span>${esc(crumb)}</span>`}</div><div class="right"><span class="pill">自托管</span>${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main></div>`;
+  const heading = (crumb || "").trim() || i18nText("项目");
+  document.title = heading + " · ZQ-CfGit";
+  root.innerHTML = i18nHTML`<div class="layout"><aside class="sidebar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="workspace"><span class="avatar">${esc(user?.username[0].toUpperCase() || "Z")}</span><div>${esc(user?.username || "ZQ-CfGit")}</div></div><div class="eyebrow">项目</div><nav>${link("/search" + (selectedSpace ? "?namespace=" + encodeURIComponent(selectedSpace) : ""), icon("code") + i18nText("跨项目搜索"), `navlink ${active === "search" ? "active" : ""}`)}${link("/", icon("repo") + i18nText("项目"), `navlink ${active === "repos" ? "active" : ""}`)}${user ? link("/settings/tokens", icon("key") + i18nText("访问令牌"), `navlink ${active === "tokens" ? "active" : ""}`) : ""}${user ? link("/settings/keys", icon("key") + i18nText("密钥与连接"), `navlink ${active === "keys" ? "active" : ""}`) : ""}${user ? link("/settings/account", icon("key") + i18nText("账户安全"), "navlink") + link("/profile", icon("users") + i18nText("我的动态"), "navlink") : ""}</nav><footer>ZQ-CfGit</footer></aside><main class="main"><header class="topbar"><div class="breadcrumb"><span>${esc(heading)}</span></div><div class="right"><span class="pill">自托管</span>${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main></div>`;
   document.querySelector("#logout")?.addEventListener("click", async () => {
     await api("/logout", { method: "POST" });
     user = null;
@@ -318,6 +320,8 @@ const textarea = (label, name, value = "", cls = "") =>
   `<div class="field"><label for="${name}">${label}</label><textarea name="${name}" id="${name}" class="${cls}">${esc(value)}</textarea></div>`;
 function authPage() {
   const initializing = setup;
+  document.title =
+    (initializing ? i18nText("初始化") : i18nText("登录")) + " · ZQ-CfGit";
   root.innerHTML = i18nHTML`<main class="auth"><section class="auth-story"><a href="/" class="brand" data-link><img src="/logo.png" alt="">ZQ-CfGit</a><div><h1>代码的归属，<br><span>由你定义。</span></h1><p>从第一个 commit 到下一次合并。把仓库、讨论与协作，留在自己的空间。</p><div class="lines">$ git add .<br>$ git commit -m "a new beginning"<br>$ git push origin main</div></div></div></section><section class="auth-form"><form id="login-form"><h2>${initializing ? i18nText("初始化") : i18nText("欢迎回来")}</h2><p class="muted">${initializing ? i18nText("使用部署时配置的初始化密钥创建管理员。") : i18nText("登录 ZQ-CfGit，继续你的下一个想法。")}</p>${initializing ? field(i18nText("初始化密钥"), "secret", "password") : ""}${field(i18nText("用户名"), "username")}${field(i18nText("密码"), "password", "password", "", i18nText("至少 12 个字符"))}${!initializing ? i18nText('<div class="field"><label>双重验证（已启用时填写）<input name="otp" maxlength="64" autocomplete="one-time-code" placeholder="验证码或恢复码"></label></div>') : ""}<button type="submit" class="btn primary">${initializing ? i18nText("初始化 ZQ-CfGit") : i18nText("登录")} →</button>${!initializing ? link("/login/recover", i18nText("忘记密码？")) + link("/", i18nText("浏览公开项目 →")) : ""}</form></section></main>`;
   bindForm("#login-form", async (data) => {
     if (initializing) {
@@ -399,7 +403,7 @@ function repoLayout(r, tab, content, actions = "") {
       .join(
         "",
       )}</nav>${r.archived_at ? i18nText('<div class="info" role="status">此项目已归档：代码与历史记录可读，协作写入和流水线已暂停。项目所有者可在设置中恢复。</div>') : ""}${content}`,
-    `${esc(r.namespace)} / ${esc(r.name)}`,
+    `${r.namespace} / ${r.name}`,
   );
 }
 function copyButton(value, id = "copy") {
@@ -792,7 +796,6 @@ async function render() {
   const path = location.pathname;
   if (path === "/" || path === "/search")
     selectedSpace = new URLSearchParams(location.search).get("namespace") || "";
-  document.title = "ZQ-CfGit";
   const titles = {
     tokens: i18nText("访问令牌"),
     keys: i18nText("密钥与连接"),
@@ -805,9 +808,21 @@ async function render() {
     "deploy-tokens": i18nText("部署令牌"),
     packages: i18nText("包仓库"),
     search: i18nText("搜索"),
+    code: i18nText("代码"),
+    new: i18nText("新建项目"),
+    login: i18nText("登录"),
+    profile: i18nText("我的动态"),
+    account: i18nText("账户安全"),
+    recover: i18nText("找回密码"),
   };
-  const segment = path.split("/").filter(Boolean).at(-1),
-    title = titles[segment] || i18nText("项目");
+  const segments = path.split("/").filter(Boolean),
+    segment = segments.at(-1),
+    repoPath =
+      segments.length > 1 &&
+      !["settings", "login", "new", "profile", "search"].includes(segments[0]),
+    title = repoPath
+      ? `${segments[0]} / ${segments[1]}`
+      : titles[segment] || i18nText("项目");
   layout(
     loadingContent(title),
     title,
@@ -948,6 +963,7 @@ try {
   booting = false;
   layout(
     i18nHTML`<h1>暂时无法加载</h1><div class="error">${esc(e.message)}</div><button id="retry-start" class="btn primary">重试</button>`,
+    i18nText("暂时无法加载"),
   );
   document.querySelector("#retry-start").onclick = () => location.reload();
 }
