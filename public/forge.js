@@ -1,7 +1,7 @@
 import {
   text as i18nText,
   html as i18nHTML,
-} from "./i18n.js?v=01bf2dfa21d8f5c0";
+} from "./i18n.js?v=575ef2cba56d5e2e";
 export async function forgePage(r, base, ap, h) {
   const { api, repoLayout, esc, field, bindForm, notice, go } = h;
   const [branches, tags] = await Promise.all([

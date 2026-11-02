@@ -35,7 +35,6 @@ const forge = hash(await readFile("public/forge.js"));
 let app = await readFile("public/app.js", "utf8");
 for (const name of [
   "highlight",
-  "account",
   "markdown",
   "notebook",
 ]) {

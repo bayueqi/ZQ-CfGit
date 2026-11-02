@@ -4,7 +4,7 @@ import { confirmGitResponse } from "./git/confirmation";
 import { repositoryAt } from "./project-transfer";
 import { projectDatabase } from "./project-db";
 import { archivedApiWrite, archiveError } from "./project-state";
-import { registerAccount, passwordProof } from "./account";
+import { passwordProof } from "./account";
 import { repositoryRole, roleRank } from "./access";
 import { base64, unbase64 } from "./git/signatures";
 import { registerForgeRoutes } from "./forge-routes";
@@ -248,7 +248,6 @@ const staticPaths = new Set([
   "/i18n.js",
   "/app.js",
   "/forge.js",
-  "/account.js",
   "/markdown.js",
   "/notebook.js",
   "/highlight.js",
@@ -376,7 +375,6 @@ app.use("*", async (c, next) => {
     fail(403, "Read-only access token");
   await next();
 });
-registerAccount(app);
 app.get("/api/health", (c) =>
   c.json({ name: "ZQ-CfGit", version: packageInfo.version, status: "ok" }),
 );

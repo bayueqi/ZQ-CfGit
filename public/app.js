@@ -4,9 +4,8 @@ import {
   getLocale,
   errorText,
   relativeTime,
-} from "./i18n.js?v=01bf2dfa21d8f5c0";
-const account = () => import("./account.js?v=124624e43ec30f03");
-import { forgePage } from "./forge.js?v=90ecf1a5f23d2bd9";
+} from "./i18n.js?v=575ef2cba56d5e2e";
+import { forgePage } from "./forge.js?v=c8814fff5c2601e5";
 const root = document.querySelector("#app");
 const esc = (x) =>
   String(x ?? "").replace(
@@ -20,13 +19,11 @@ const icons = {
   repo: "M4 3h13a2 2 0 0 1 2 2v16H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z M3 17h16 M7 7h8 M7 10h6",
   plus: "M12 5v14 M5 12h14",
   code: "M8 6l-6 6 6 6 M16 6l6 6-6 6",
-  key: "M14 7a5 5 0 1 0-3 9l3 3h3v-3h3v-3l-3-3",
   folder: "M3 5h6l2 3h10v12H3z",
   file: "M5 3h9l5 5v13H5z M14 3v6h5",
   branch: "M6 3v12a4 4 0 0 0 8 0V9 M3 3h6 M11 6h6v3h-6z",
   search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16 M21 21l-4.3-4.3",
   link: "M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1 M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1",
-  shield: "M12 3l8 3v6c0 5-3.4 8.3-8 9.5C7.4 20.3 4 17 4 12V6z M9 12l2 2 4-4",
 };
 const icon = (name) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${icons[name] || icons.repo}"/></svg>`;
@@ -240,12 +237,10 @@ document.addEventListener("click", (e) => {
 window.addEventListener("popstate", render);
 const link = (path, label, cls = "") =>
   `<a data-link href="${esc(path === "/" && user && selectedSpace ? "/?namespace=" + encodeURIComponent(selectedSpace) : path)}" class="${cls}">${label}</a>`;
-function layout(content, crumb = i18nText("项目"), active = "repos") {
+function layout(content, crumb = i18nText("项目")) {
   const heading = (crumb || "").trim() || i18nText("项目");
   document.title = heading + " · ZQ-CfGit";
-  const navItem = (path, ic, label, key) =>
-    link(path, icon(ic) + label, `navlink${active === key ? " active" : ""}`);
-  root.innerHTML = i18nHTML`<div class="layout"><aside class="sidebar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="workspace"><span class="avatar">${esc(user?.username[0].toUpperCase() || "Z")}</span><div>${esc(user?.username || "ZQ-CfGit")}</div></div><div class="eyebrow">项目</div><nav>${navItem("/", "repo", i18nText("项目"), "repos")}${user ? navItem("/settings/tokens", "key", i18nText("访问令牌"), "tokens") : ""}${user ? navItem("/settings/account", "shield", i18nText("账户安全"), "account") : ""}</nav><footer>ZQ-CfGit</footer></aside><main class="main"><header class="topbar"><div class="breadcrumb"><span>${esc(heading)}</span></div><div class="right"><span class="pill">自托管</span>${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main></div>`;
+  root.innerHTML = i18nHTML`<main class="main"><header class="topbar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="breadcrumb"><span>${esc(heading)}</span></div><div class="right">${user ? link("/settings/tokens", i18nText("访问令牌"), "toplink") : ""}<span class="pill">自托管</span>${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main>`;
   document.querySelector("#logout")?.addEventListener("click", async () => {
     await api("/logout", { method: "POST" });
     user = null;
@@ -428,7 +423,7 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
   if (notebook) {
     try {
       const { mountNotebook } =
-        await import("./notebook.js?v=b4577b9263734f9b");
+        await import("./notebook.js?v=9c70f835d567613c");
       if (version !== routeVersion || !notebook.isConnected) return;
       mountNotebook(notebook, data.content, { base, ref: data.ref, path: p });
     } catch {
@@ -709,7 +704,6 @@ async function render() {
     code: i18nText("代码"),
     new: i18nText("新建项目"),
     login: i18nText("登录"),
-    account: i18nText("账户安全"),
   };
   const segments = path.split("/").filter(Boolean),
     segment = segments.at(-1),
@@ -750,11 +744,6 @@ async function render() {
       user,
       markdown: applyMarkdown,
     };
-    if (path === "/settings/account") {
-      if (!user) return go("/login");
-      await (await account()).securityPage(helpers);
-      return;
-    }
     if (path === "/settings/tokens") {
       await tokensPage(version);
       return;

@@ -53,7 +53,6 @@
   "Branch not found": "未找到分支",
   "Branch required": "需要分支",
   "Browser file limit is 1 MiB; use git clone": "浏览器上传上限为 1 MiB，请使用 git clone",
-  "Browser session required": "需要浏览器会话",
   "Cannot delete the default branch": "无法删除默认分支",
   "Capabilities must appear on first command": "能力声明必须出现在第一条命令中",
   "Chunk exceeds 4 MiB": "数据块超过 4 MiB",

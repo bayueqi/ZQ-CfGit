@@ -10,40 +10,35 @@
     <meta name="theme-color" content="#171a20" />
     <title>ZQ-CfGit</title>
     <link rel="icon" type="image/png" href="/favicon.png" /><link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/style.css?v=27f2d937ce87a406" />
-    <link rel="modulepreload" href="/forge.js?v=90ecf1a5f23d2bd9" />
-    <script type="module" src="/app.js?v=b3bfdb2bdd8cc2fd"></script>
+    <link rel="stylesheet" href="/style.css?v=2a80ab7cd2f9540e" />
+    <link rel="modulepreload" href="/forge.js?v=c8814fff5c2601e5" />
+    <script type="module" src="/app.js?v=6ad2c79bb0733e25"></script>
   </head>
   <body>
     <div id="app">
-      <div class="layout">
-        <aside class="sidebar">
+      <main class="main">
+        <header class="topbar">
           <a class="brand" href="/"
             ><img src="/logo.png" alt="" />ZQ-CfGit</a
           >
-          <nav>
-            <a class="navlink active" href="/" data-i18n-shell="projects"
-              >项目</a
-            >
-          </nav>
-        </aside>
-        <main class="main">
-          <header class="topbar" data-i18n-shell="workspace">工作空间</header>
-          <div class="content">
-            <div class="titlebar"><h1 data-i18n-shell="projects">项目</h1></div>
-            <section
-              class="panel page-loading"
-              aria-busy="true"
-              aria-label="正在加载项目"
-            >
-              <div class="skeleton skeleton-heading"></div>
-              <div class="skeleton skeleton-row"></div>
-              <div class="skeleton skeleton-row"></div>
-              <div class="skeleton skeleton-row"></div>
-            </section>
+          <div class="breadcrumb">
+            <span data-i18n-shell="projects">项目</span>
           </div>
-        </main>
-      </div>
+        </header>
+        <div class="content">
+          <div class="titlebar"><h1 data-i18n-shell="projects">项目</h1></div>
+          <section
+            class="panel page-loading"
+            aria-busy="true"
+            aria-label="正在加载项目"
+          >
+            <div class="skeleton skeleton-heading"></div>
+            <div class="skeleton skeleton-row"></div>
+            <div class="skeleton skeleton-row"></div>
+            <div class="skeleton skeleton-row"></div>
+          </section>
+        </div>
+      </main>
     </div>
     <div id="notice" role="status" aria-live="polite"></div>
   </body>
