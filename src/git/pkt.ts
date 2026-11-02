@@ -29,9 +29,3 @@ export function readPackets(data: Uint8Array, stopAtFlush = false) {
   }
   return { packets, offset: pos };
 }
-export function band(data: Uint8Array) {
-  const chunks: Uint8Array[] = [];
-  for (let pos = 0; pos < data.length; pos += 65515)
-    chunks.push(pkt(concat(Uint8Array.of(1), data.subarray(pos, pos + 65515))));
-  return concat(...chunks, FLUSH);
-}

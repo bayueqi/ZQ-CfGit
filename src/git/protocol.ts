@@ -1,5 +1,4 @@
 import { HTTPException } from "hono/http-exception";
-import { refOperations } from "../delegation";
 import { reportGitFailure } from "./diagnostics";
 import { fail } from "../security";
 import { GitRepository } from "./repository";
@@ -140,12 +139,6 @@ export async function receive(
         seen.add(command.ref);
         if ((repo.refs[command.ref] || "0".repeat(40)) !== command.old)
           fail(409, "Reference changed concurrently");
-        const full =
-          repo.policy.namespace === "ephemeral"
-            ? "refs/namespaces/ephemeral/" + command.ref
-            : command.ref;
-        if (refOperations(full, repo.policy.rules).includes("no-push"))
-          fail(403, "Ref policy forbids update: " + full);
       }
       await ingest();
     } else if (data.length > offset) {

@@ -15,11 +15,9 @@ export interface User {
 export interface Repo {
   id: string;
   owner_id: string;
-  workspace_id?: string | null;
   namespace: string;
   name: string;
   description: string;
-  visibility: "private" | "public";
   default_branch: string;
   created_at: string;
   deleted_at?: string | null;
@@ -33,8 +31,7 @@ export type App = {
     user: User | null;
     repoRole: string;
     scope: "read" | "write";
-    kind: "pat" | "session" | "jwt" | null;
-    delegation?: import("./delegation").Delegation;
+    kind: "pat" | "session" | null;
     credential: string | null;
   };
 };

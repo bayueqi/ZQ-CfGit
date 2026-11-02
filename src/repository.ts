@@ -31,17 +31,11 @@ import type { RefStorage } from "./git/repository";
 import { lifecycle, collectDeleted, projectDefaultBranch } from "./lifecycle";
 import { DurableObject } from "cloudflare:workers";
 import { HTTPException } from "hono/http-exception";
-import {
-  assertGitReceiptCapacity,
-  drainGitReceipts,
-  stageGitReceipt,
-  putRefPublication,
-} from "./git/receipts";
+import { putRefPublication } from "./git/receipts";
 import type { Env } from "./types";
 import { boundedBody, fail, branch, repoName } from "./security";
 import { ObjectStore, Refs, text } from "./git/objects";
 import { namespaceRepositories } from "./git/namespaces";
-import { normalizePolicies } from "./delegation";
 import { advertise, upload } from "./git/protocol";
 import { importSnapshot } from "./git/legacy";
 /** The per-repository DO serializes requests; immutable R2 objects precede atomic ref publication. */
@@ -127,7 +121,6 @@ export class Repository extends DurableObject<Env> {
         return new Response(null, { status: 204 });
       }
       await projectDefaultBranch(this.env, this.ctx.storage);
-      const receipts = await drainGitReceipts(this.env, this.ctx.storage);
       try {
         await collectPackCache(this.env.OBJECTS, this.ctx.storage);
       } catch {
@@ -138,10 +131,7 @@ export class Repository extends DurableObject<Env> {
         this.env.OBJECTS,
         this.ctx.storage,
       );
-      if (receipts.pending || incomingPending)
-        await this.ctx.storage.setAlarm(
-          Date.now() + (receipts.failed ? 30000 : 1000),
-        );
+      if (incomingPending) await this.ctx.storage.setAlarm(Date.now() + 1000);
       return new Response(null, { status: 204 });
     });
   }
@@ -190,7 +180,7 @@ export class Repository extends DurableObject<Env> {
         readonlyStorage,
         refs,
         defaultBranch,
-        { rules: [] },
+        {},
       )(ephemeral);
       // Explicit unpublished/ancestry selectors retain their existing serialized API semantics.
       const query = new URL(request.url).searchParams;
@@ -326,35 +316,11 @@ export class Repository extends DurableObject<Env> {
       } else refs = {};
     }
     ready();
-    const policy = JSON.parse(
-      request.headers.get("x-write-policy") || '{"rules":[]}',
-    );
     const publication: RefStorage = {
       get: <T>(key: string) => this.ctx.storage.get<T>(key),
       put: async (key, value) => {
         if (key !== "refs.v2") fail(400, "Unexpected Git state key");
-        const next = value as Refs;
-        const before = (await this.ctx.storage.get<Refs>("refs.v2")) || {};
-        const values: Record<string, unknown> = { "refs.v2": next };
-        let refsUpdated = 0;
-        for (const ref of new Set([
-          ...Object.keys(before),
-          ...Object.keys(next),
-        ]))
-          if (before[ref] !== next[ref]) refsUpdated++;
-        if (
-          request.method === "POST" &&
-          url.pathname === "/git/git-receive-pack"
-        )
-          await stageGitReceipt(
-            this.ctx.storage,
-            values,
-            {
-              repository_id: id,
-              actor_id: request.headers.get("x-actor-id") || null,
-            },
-            refsUpdated,
-          );
+        const values: Record<string, unknown> = { "refs.v2": value as Refs };
         await this.ctx.storage.setAlarm(Date.now() + 1000);
         await putRefPublication(this.ctx.storage, values);
       },
@@ -364,18 +330,7 @@ export class Repository extends DurableObject<Env> {
       publication,
       refs,
       defaultBranch,
-      {
-        rules: normalizePolicies(policy.rules),
-        allowForce: policy.allowForce === true,
-        signingKeys: async () =>
-          (
-            await this.env.DB.prepare(
-              "SELECT format,public_key FROM signing_keys WHERE user_id=?",
-            )
-              .bind(request.headers.get("x-repo-owner-id") || "")
-              .all<{ format: string; public_key: string }>()
-          ).results,
-      },
+      {},
     );
     const ephemeral = request.headers.get("x-namespace") === "ephemeral",
       repo = select(ephemeral),
@@ -479,9 +434,6 @@ export class Repository extends DurableObject<Env> {
       );
     }
     if (path === "/git/git-receive-pack" && request.method === "POST") {
-      // Check before ingestion and before a possible upstream push. The request
-      // gate serializes writers through atomic publication.
-      await assertGitReceiptCapacity(this.ctx.storage);
       return receiveStream(repo, request, this.env.OBJECTS, this.ctx.storage);
     }
     if (path === "/git/git-upload-pack" && request.method === "POST") {

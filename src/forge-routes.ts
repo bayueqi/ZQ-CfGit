@@ -13,12 +13,6 @@ interface Helpers {
     path: string,
     options?: any,
   ) => Promise<Response>;
-  audit: (
-    c: Context<App>,
-    action: string,
-    id: string,
-    detail?: string,
-  ) => Promise<void>;
 }
 export function registerForgeRoutes(app: Hono<App>, h: Helpers) {
   for (const [route, path] of Object.entries({
@@ -83,8 +77,6 @@ export function registerForgeRoutes(app: Hono<App>, h: Helpers) {
       body: JSON.stringify(operation ? { ...data, operation } : data),
       mutation: level === "write",
     });
-    if (level === "write" && response.ok)
-      await h.audit(c, "git." + path.slice(1).replaceAll("/", "."), repo.id);
     return response;
   };
   app.post("/api/repos/:namespace/:repo/branches/create", (c) =>
@@ -136,7 +128,6 @@ export function registerForgeRoutes(app: Hono<App>, h: Helpers) {
         ephemeral: c.req.query("ephemeral") === "true",
       }),
     });
-    if (response.ok) await h.audit(c, "git.tag.delete", repo.id);
     return response;
   });
   app.post("/api/repos/:namespace/:repo/archive", (c) =>

@@ -413,46 +413,6 @@ p {
 }
 
 /* ============================================================
-   统计卡
-   ============================================================ */
-.stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.stat {
-  padding: 14px 16px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  min-width: 0;
-}
-
-.stat .muted {
-  font-size: 12.5px;
-}
-
-.stat .number {
-  margin-top: 6px;
-  font-size: 25px;
-  font-weight: 650;
-  letter-spacing: -0.6px;
-  color: var(--ink);
-  line-height: 1.2;
-}
-
-.stat .number span {
-  margin-left: 6px;
-  font-size: 12px;
-  font-weight: 400;
-  letter-spacing: 0;
-  color: var(--muted-2);
-}
-
-/* ============================================================
    面板 / 行
    ============================================================ */
 .panel {
@@ -1756,23 +1716,6 @@ select:focus {
     margin: 0;
   }
 
-  .stats {
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-
-  .stat {
-    padding: 12px;
-  }
-
-  .stat .number {
-    font-size: 20px;
-  }
-
-  .stat .number span {
-    display: none;
-  }
-
   .repo-row {
     grid-template-columns: 34px minmax(0, 1fr);
     padding: 13px;
@@ -1874,10 +1817,6 @@ select:focus {
 }
 
 @media (max-width: 480px) {
-  .stats {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .breadcrumb {
     font-size: 12px;
   }

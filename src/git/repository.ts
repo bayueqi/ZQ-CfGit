@@ -1,4 +1,4 @@
-import { enforceWritePolicy, type WritePolicy } from "./policy";
+import { type WritePolicy } from "./policy";
 import { gitStage } from "./diagnostics";
 import { fail } from "../security";
 import {
@@ -35,19 +35,9 @@ export class GitRepository {
     readonly storage: RefStorage,
     public refs: Refs,
     readonly defaultBranch: string,
-    readonly policy: WritePolicy = { rules: [] },
+    readonly policy: WritePolicy = {},
   ) {}
   async publish(refs: Refs) {
-    await enforceWritePolicy(this.store, this.refs, refs, this.policy);
-    await this.store.flush();
-    await this.store.validateClosure(Object.values(refs));
-    if (this.policy.beforePublish) {
-      refs = await this.policy.beforePublish(
-        this.refs,
-        refs,
-        this.policy.namespace === "ephemeral",
-      );
-    }
     await publishRefs(this.store, this.storage, refs);
     this.refs = refs;
   }

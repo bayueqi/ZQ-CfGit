@@ -10,18 +10,13 @@ export async function renameProject(
 ) {
   if (repo.name.toLowerCase() === name.toLowerCase())
     fail(400, "Project already has this address");
-  const guard = crypto.randomUUID(),
-    detail = JSON.stringify({
-      from: repo.namespace + "/" + repo.name,
-      to: repo.namespace + "/" + name,
-    });
+  const guard = crypto.randomUUID();
   try {
     await env.DB.batch([
       env.DB.prepare(
         `INSERT INTO mutation_guards(id,accepted) SELECT ?,CASE WHEN EXISTS(
-        SELECT 1 FROM repositories r JOIN users u ON u.id=? WHERE r.id=? AND r.deleted_at IS NULL AND u.disabled=0 AND r.lifecycle_revision=? AND (
-          (r.workspace_id IS NULL AND r.owner_id=u.id) OR EXISTS(SELECT 1 FROM workspace_members wm WHERE wm.workspace_id=r.workspace_id AND wm.user_id=u.id AND wm.role='owner')
-        )) THEN 1 ELSE 0 END`,
+        SELECT 1 FROM repositories r JOIN users u ON u.id=? WHERE r.id=? AND r.deleted_at IS NULL AND u.disabled=0 AND r.lifecycle_revision=? AND r.owner_id=u.id
+        ) THEN 1 ELSE 0 END`,
       ).bind(guard, actor, repo.id, revision),
       env.DB.prepare(
         "DELETE FROM repository_aliases WHERE namespace=? AND name=? AND repo_id=?",
@@ -32,9 +27,6 @@ export async function renameProject(
       env.DB.prepare(
         "UPDATE repositories SET name=?,lifecycle_revision=lifecycle_revision+1 WHERE id=?",
       ).bind(name, repo.id),
-      env.DB.prepare(
-        "INSERT INTO audit(repo_id,actor_id,action,detail) VALUES(?,?,?,?)",
-      ).bind(repo.id, actor, "repo.rename", detail),
       env.DB.prepare("DELETE FROM mutation_guards WHERE id=?").bind(guard),
     ]);
   } catch (error) {

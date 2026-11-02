@@ -5,11 +5,10 @@ import { repositoryAt } from "./project-transfer";
 import { projectDatabase } from "./project-db";
 import { archivedApiWrite, archiveError } from "./project-state";
 import { passwordProof } from "./account";
-import { repositoryRole, roleRank } from "./access";
+import { repositoryRole } from "./access";
 import { base64, unbase64 } from "./git/signatures";
 import { registerForgeRoutes } from "./forge-routes";
 import { fetchGithubSnapshot } from "./github-sync";
-import { verifyDelegation, requireScope } from "./delegation";
 import { Hono, type Context } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
@@ -45,19 +44,6 @@ async function input<T>(c: Context<App>, schema: z.ZodType<T>): Promise<T> {
 }
 const requireUser = (c: Context<App>) =>
   c.get("user") || fail(401, "Sign in required");
-async function audit(
-  c: Context<App>,
-  action: string,
-  repoId: string | null = null,
-  detail = "",
-) {
-  const statements = [
-    c.env.DB.prepare(
-      "INSERT INTO audit(repo_id,actor_id,action,detail) VALUES(?,?,?,?)",
-    ).bind(repoId, c.get("user")?.id || null, action, detail),
-  ];
-  await c.env.DB.batch(statements);
-}
 async function repoAccess(
   c: Context<App>,
   level: "read" | "write" | "maintain" = "read",
@@ -67,27 +53,11 @@ async function repoAccess(
   const located = await repositoryAt(c.env, namespace || "", name || "");
   if (!located) fail(404, "Repository not found");
   const { repo: r, moved } = located;
-  const delegated = c.get("delegation");
-  if (delegated) {
-    const operation = c.req.path.split("/").slice(5).join("/");
-    if (/^(members|audit)(\/|$)/.test(operation))
-      fail(403, "Delegated Git tokens cannot manage collaboration");
-    requireScope(
-      delegated,
-      level === "read"
-        ? "git:read"
-        : level === "maintain"
-          ? "repo:write"
-          : "git:write",
-      `${r.namespace}/${r.name}`,
-    );
-  }
   const user = c.get("user");
-  const role = await repositoryRole(c.env, r, user);
+  const role = repositoryRole(r, user);
   c.set("repoRole", role);
   if (moved) {
-    if (r.visibility !== "public" && roleRank[role] < 1)
-      fail(404, "Repository not found");
+    if (role !== "owner") fail(404, "Repository not found");
     if (!["GET", "HEAD"].includes(c.req.method))
       fail(409, "Project moved; fetch the current project URL before writing");
     const url = new URL(c.req.url);
@@ -109,29 +79,21 @@ async function repoAccess(
     });
   }
   if (
-    (r.visibility === "public" || roleRank[role] >= 1) &&
     r.archived_at &&
     archivedApiWrite(c.req.method, c.req.path.split("/").slice(5).join("/"))
   )
     fail(409, "Repository archived; an owner must unarchive it before writing");
-  if (level === "read" && (r.visibility === "public" || roleRank[role] >= 1)) {
-    c.env = {
-      ...c.env,
-      DB: projectDatabase(c.env.DB, r.id, r.lifecycle_revision || 0),
-    };
-    return r;
+  if (role !== "owner") {
+    if (!user) fail(401, "Authentication required");
+    fail(404, "Repository not found");
   }
-  if (!user) fail(401, "Authentication required");
-  if (level === "read") fail(404, "Repository not found");
-  if (c.get("scope") === "read") fail(403, "Read-only token");
-  if (roleRank[role] >= (level === "maintain" ? 3 : 2)) {
-    c.env = {
-      ...c.env,
-      DB: projectDatabase(c.env.DB, r.id, r.lifecycle_revision || 0),
-    };
-    return r;
-  }
-  fail(403, "Insufficient repository permissions");
+  if (level !== "read" && c.get("scope") === "read")
+    fail(403, "Read-only token");
+  c.env = {
+    ...c.env,
+    DB: projectDatabase(c.env.DB, r.id, r.lifecycle_revision || 0),
+  };
+  return r;
 }
 async function engine(
   c: Context<App>,
@@ -146,23 +108,10 @@ async function engine(
   } = {},
 ) {
   const headers = new Headers(options.headers);
-  headers.delete("x-write-policy");
   headers.delete("x-namespace");
   headers.set("x-repo-id", repo.id);
   headers.set("x-lifecycle-revision", String(repo.lifecycle_revision || 0));
   headers.set("x-default-branch", repo.default_branch);
-  headers.set("x-repo-owner-id", repo.owner_id);
-  headers.set("x-actor-id", c.get("user")?.id || "");
-  headers.set(
-    "x-actor",
-    c.get("delegation")?.subject || c.get("user")?.username || "",
-  );
-  const delegation = c.get("delegation");
-  if (delegation)
-    headers.set(
-      "x-write-policy",
-      JSON.stringify({ rules: delegation.refs, allowForce: true }),
-    );
   if (options.namespace) headers.set("x-namespace", options.namespace);
   else if (c.req.query("ephemeral") === "true")
     headers.set("x-namespace", "ephemeral");
@@ -336,18 +285,7 @@ app.use("*", async (c, next) => {
     ? getCookie(c, "zq-cfgit_session")
     : undefined;
   token ||= cookie;
-  if (token?.split(".").length === 3 && authorization) {
-    const delegation = await verifyDelegation(c.env, token);
-    c.set("delegation", delegation);
-    c.set("user", delegation.user);
-    c.set(
-      "scope",
-      delegation.scopes.some((s) => s === "git:write" || s === "repo:write")
-        ? "write"
-        : "read",
-    );
-    c.set("kind", "jwt");
-  } else if (token) {
+  if (token) {
     const hash = await digest(token);
     const row = await c.env.DB.prepare(
       "SELECT u.id,u.username,u.admin,c.scope,c.kind FROM credentials c JOIN users u ON u.id=c.user_id WHERE u.disabled=0 AND c.hash=? AND c.expires_at>?",
@@ -571,7 +509,7 @@ app.post("/api/tokens", async (c) => {
   const token = randomToken(),
     id = crypto.randomUUID();
   const minted = await c.env.DB.prepare(
-    "INSERT INTO credentials(hash,id,user_id,name,kind,scope,expires_at,oidc_provider_id) SELECT ?,?,?,?,'pat',?,?,(SELECT oidc_provider_id FROM credentials WHERE hash=?) WHERE EXISTS(SELECT 1 FROM users u JOIN credentials c ON c.user_id=u.id WHERE u.id=? AND u.auth_epoch=? AND u.disabled=0 AND c.hash=? AND c.kind='session' AND c.expires_at>?)",
+    "INSERT INTO credentials(hash,id,user_id,name,kind,scope,expires_at) SELECT ?,?,?,?,'pat',?,? WHERE EXISTS(SELECT 1 FROM users u JOIN credentials c ON c.user_id=u.id WHERE u.id=? AND u.auth_epoch=? AND u.disabled=0 AND c.hash=? AND c.kind='session' AND c.expires_at>?)",
   )
     .bind(
       await digest(token),
@@ -580,7 +518,6 @@ app.post("/api/tokens", async (c) => {
       b.name,
       b.scope,
       Date.now() + b.days * 86400000,
-      c.get("credential"),
       u.id,
       snapshot.auth_epoch,
       c.get("credential"),
@@ -588,7 +525,6 @@ app.post("/api/tokens", async (c) => {
     )
     .run();
   if (!minted.meta.changes) fail(409, "Account changed; sign in again");
-  await audit(c, "token.create", null, b.name);
   return c.json({ id, token }, 201);
 });
 app.delete("/api/tokens/:id", async (c) => {
@@ -601,8 +537,6 @@ app.delete("/api/tokens/:id", async (c) => {
   return c.json({ ok: true });
 });
 app.get("/api/repos", async (c) => {
-  const delegation = c.get("delegation");
-  requireScope(delegation, "org:read");
   const u = c.get("user");
   const namespaceFilter = c.req.query("namespace") || "";
   const search = (c.req.query("q") || "").slice(0, 100),
@@ -638,12 +572,10 @@ app.get("/api/repos", async (c) => {
       fail(400, "Invalid repository cursor");
     }
   }
-  const query = `SELECT DISTINCT r.* FROM repositories r LEFT JOIN members m ON m.repo_id=r.id AND m.user_id=? LEFT JOIN workspace_members wm ON wm.workspace_id=r.workspace_id AND wm.user_id=? WHERE r.deleted_at IS NULL AND ${delegation ? "((r.workspace_id IS NULL AND r.owner_id=?) OR m.user_id IS NOT NULL OR wm.user_id IS NOT NULL)" : "(r.visibility='public' OR (r.workspace_id IS NULL AND r.owner_id=?) OR m.user_id IS NOT NULL OR wm.user_id IS NOT NULL)"} AND (?='' OR r.namespace=?) AND (r.name LIKE ? ESCAPE '\\' OR r.description LIKE ? ESCAPE '\\') ORDER BY r.created_at DESC,r.id LIMIT ? OFFSET ?`;
+  const query = `SELECT r.* FROM repositories r WHERE r.deleted_at IS NULL AND r.owner_id=? AND (?='' OR r.namespace=?) AND (r.name LIKE ? ESCAPE '\\' OR r.description LIKE ? ESCAPE '\\') ORDER BY r.created_at DESC,r.id LIMIT ? OFFSET ?`;
   const pattern = "%" + search.replace(/[\\%_]/g, "\\$&") + "%";
   const result = await c.env.DB.prepare(query)
     .bind(
-      u?.id || "",
-      u?.id || "",
       u?.id || "",
       namespaceFilter,
       namespaceFilter,
@@ -681,18 +613,16 @@ app.post("/api/repos", async (c) => {
       name: repoName.optional(),
       id: repoName.optional(),
       description: z.string().max(1000).default(""),
-      visibility: z.enum(["public", "private"]).default("private"),
       default_branch: branch.optional(),
     }),
   );
   const namespace = b.namespace || u.username;
   const id = crypto.randomUUID();
   b.name = b.name || b.id || id;
-  requireScope(c.get("delegation"), "repo:write", `${namespace}/${b.name}`);
   b.default_branch = b.default_branch || "main";
   try {
     await c.env.DB.prepare(
-      "INSERT INTO repositories(id,owner_id,namespace,name,description,visibility,default_branch,workspace_id) VALUES(?,?,?,?,?,?,?,?)",
+      "INSERT INTO repositories(id,owner_id,namespace,name,description,visibility,default_branch) VALUES(?,?,?,?,?,'private',?)",
     )
       .bind(
         id,
@@ -700,15 +630,12 @@ app.post("/api/repos", async (c) => {
         namespace,
         b.name,
         b.description,
-        b.visibility,
         b.default_branch,
-        null,
       )
       .run();
   } catch {
     fail(409, "Repository name already exists");
   }
-  await audit(c, "repo.create", id, b.name);
   return c.json(
     {
       id,
@@ -729,7 +656,7 @@ app.get("/api/repos/:namespace/:repo", async (c) => {
 });
 app.post("/api/repos/:namespace/:repo/transfer", async (c) => {
   const r = await repoAccess(c, "maintain");
-  if (c.get("delegation") || c.get("repoRole") !== "owner")
+  if (c.get("repoRole") !== "owner")
     fail(403, "Project owner required");
   const b = await input(
     c,
@@ -748,7 +675,7 @@ app.post("/api/repos/:namespace/:repo/transfer", async (c) => {
 });
 app.post("/api/repos/:namespace/:repo/sync", async (c) => {
   const r = await repoAccess(c, "maintain");
-  if (c.get("delegation") || c.get("repoRole") !== "owner")
+  if (c.get("repoRole") !== "owner")
     fail(403, "Project owner required");
   const b = await input(
     c,
@@ -768,7 +695,6 @@ app.post("/api/repos/:namespace/:repo/sync", async (c) => {
   await c.env.DB.prepare("UPDATE repositories SET base_repo=? WHERE id=?")
     .bind(`${snap.owner}/${snap.name}`, r.id)
     .run();
-  await audit(c, "repo.sync", r.id, `${snap.owner}/${snap.name}@${snap.branch}`);
   return c.json({
     ...result,
     source: `${snap.owner}/${snap.name}`,
@@ -778,7 +704,7 @@ app.post("/api/repos/:namespace/:repo/sync", async (c) => {
 });
 app.put("/api/repos/:namespace/:repo/lifecycle", async (c) => {
   const r = await repoAccess(c, "maintain");
-  if (c.get("delegation") || c.get("repoRole") !== "owner")
+  if (c.get("repoRole") !== "owner")
     fail(403, "Project owner required");
   const b = await input(
     c,
@@ -797,7 +723,6 @@ app.patch("/api/repos/:namespace/:repo", async (c) => {
     c,
     z.object({
       description: z.string().max(1000).optional(),
-      visibility: z.enum(["public", "private"]).optional(),
       default_branch: branch.optional(),
     }),
   );
@@ -806,11 +731,10 @@ app.patch("/api/repos/:namespace/:repo", async (c) => {
       default_branch: b.default_branch,
     });
   await c.env.DB.prepare(
-    "UPDATE repositories SET description=?,visibility=? WHERE id=?",
+    "UPDATE repositories SET description=? WHERE id=?",
   )
-    .bind(b.description ?? r.description, b.visibility ?? r.visibility, r.id)
+    .bind(b.description ?? r.description, r.id)
     .run();
-  await audit(c, "repo.update", r.id, b.visibility);
   return c.json({ ok: true });
 });
 app.delete("/api/repos/:namespace/:repo", async (c) => {
@@ -824,9 +748,7 @@ app.get("/api/repo-url/:id", async (c) => {
     .bind(c.req.param("id"))
     .first<Repo>();
   if (!r) fail(404, "Repository not found");
-  requireScope(c.get("delegation"), "git:read", r.namespace + "/" + r.name);
-  const role = await repositoryRole(c.env, r, c.get("user"));
-  if (r.visibility !== "public" && roleRank[role] < 1)
+  if (repositoryRole(r, c.get("user")) !== "owner")
     fail(404, "Repository not found");
   return c.json({
     id: r.id,
@@ -863,7 +785,7 @@ app.get("/api/repos/:namespace/:repo/preview", async (c) => {
     },
   });
 });
-registerForgeRoutes(app, { access: repoAccess, engine, audit });
+registerForgeRoutes(app, { access: repoAccess, engine });
 for (const operation of [
   "branches",
   "tree",
@@ -903,20 +825,7 @@ app.post("/api/repos/:namespace/:repo/commit", async (c) => {
     author: u.username,
     email: `${u.username}@users.zq-cfgit.local`,
   });
-  await audit(c, "repo.commit", r.id, result.sha);
   return c.json(result, 201);
-});
-app.get("/api/repos/:namespace/:repo/audit", async (c) => {
-  const r = await repoAccess(c, "maintain");
-  return c.json({
-    events: (
-      await c.env.DB.prepare(
-        "SELECT a.*,u.username AS actor FROM audit a LEFT JOIN users u ON u.id=a.actor_id WHERE repo_id=? ORDER BY a.id DESC LIMIT 100",
-      )
-        .bind(r.id)
-        .all()
-    ).results,
-  });
 });
 app.all("/:namespace/:git/*", async (c, next) => {
   const gitName = c.req.param("git");
@@ -959,14 +868,9 @@ app.all("/:namespace/:git/*", async (c, next) => {
     );
     writing = batch.operation === "upload";
   }
-  requireScope(
-    c.get("delegation"),
-    writing ? "git:write" : "git:read",
-    `${r.namespace}/${r.name}`,
-  );
-  const role = await repositoryRole(c.env, r, u),
-    read = r.visibility === "public" || roleRank[role] >= 1,
-    write = roleRank[role] >= 2;
+  const role = repositoryRole(r, u),
+    read = role === "owner",
+    write = role === "owner";
   if (!read)
     fail(u ? 404 : 401, "Repository not found or authentication required");
   if (writing && (!write || c.get("scope") !== "write"))
@@ -1057,8 +961,6 @@ app.all("/:namespace/:git/*", async (c, next) => {
     c.req.method === "POST" && suffix === "git-receive-pack"
       ? await confirmGitResponse(r.id, forward)
       : await forward();
-  // Successful native ref updates carry a durable audit event in the same DO
-  // storage write. Never turn an accepted push into HTTP 500 with post-commit D1 I/O.
   return response;
 });
 app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));

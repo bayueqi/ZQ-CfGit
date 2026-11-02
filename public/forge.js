@@ -1,7 +1,7 @@
 import {
   text as i18nText,
   html as i18nHTML,
-} from "./i18n.js?v=276e71307a7942f3";
+} from "./i18n.js?v=8502f51a9d3cb3ce";
 export async function forgePage(r, base, ap, h) {
   const { api, repoLayout, esc, field, bindForm, notice, go } = h;
   const [branches, tags] = await Promise.all([
@@ -9,7 +9,7 @@ export async function forgePage(r, base, ap, h) {
     api(ap + "/tags"),
   ]);
   if (!h.current()) return;
-  const write = ["owner", "maintainer", "developer"].includes(r.role);
+  const write = r.role === "owner";
   repoLayout(
     r,
     "forge",

@@ -4,8 +4,8 @@ import {
   getLocale,
   errorText,
   relativeTime,
-} from "./i18n.js?v=276e71307a7942f3";
-import { forgePage } from "./forge.js?v=2fd078269be738d8";
+} from "./i18n.js?v=8502f51a9d3cb3ce";
+import { forgePage } from "./forge.js?v=c09916dffa2c3882";
 const root = document.querySelector("#app");
 const esc = (x) =>
   String(x ?? "").replace(
@@ -283,7 +283,7 @@ function authPage() {
   const initializing = setup;
   document.title =
     (initializing ? i18nText("初始化") : i18nText("登录")) + " · ZQ-CfGit";
-  root.innerHTML = i18nHTML`<main class="auth"><section class="auth-story"><a href="/" class="brand" data-link><img src="/logo.png" alt="">ZQ-CfGit</a><div><h1>代码的归属，<br><span>由你定义。</span></h1><p>从第一个 commit 到下一次合并。把仓库、讨论与协作，留在自己的空间。</p><div class="lines">$ git add .<br>$ git commit -m "a new beginning"<br>$ git push origin main</div></div></div></section><section class="auth-form"><form id="login-form"><h2>${initializing ? i18nText("初始化") : i18nText("欢迎回来")}</h2><p class="muted">${initializing ? i18nText("使用部署时配置的初始化密钥创建管理员。") : i18nText("登录 ZQ-CfGit，继续你的下一个想法。")}</p>${initializing ? field(i18nText("初始化密钥"), "secret", "password") : ""}${field(i18nText("用户名"), "username")}${field(i18nText("密码"), "password", "password", "", i18nText("至少 12 个字符"))}<button type="submit" class="btn primary">${initializing ? i18nText("初始化 ZQ-CfGit") : i18nText("登录")} →</button>${!initializing ? link("/", i18nText("浏览公开项目 →")) : ""}</form></section></main>`;
+  root.innerHTML = i18nHTML`<main class="auth"><section class="auth-story"><a href="/" class="brand" data-link><img src="/logo.png" alt="">ZQ-CfGit</a><div><h1>代码的归属，<br><span>由你定义。</span></h1><p>从第一个 commit 到下一次合并。把仓库，留在自己的空间。</p><div class="lines">$ git add .<br>$ git commit -m "a new beginning"<br>$ git push origin main</div></div></div></section><section class="auth-form"><form id="login-form"><h2>${initializing ? i18nText("初始化") : i18nText("欢迎回来")}</h2><p class="muted">${initializing ? i18nText("使用部署时配置的初始化密钥创建管理员。") : i18nText("登录 ZQ-CfGit，继续你的下一个想法。")}</p>${initializing ? field(i18nText("初始化密钥"), "secret", "password") : ""}${field(i18nText("用户名"), "username")}${field(i18nText("密码"), "password", "password", "", i18nText("至少 12 个字符"))}<button type="submit" class="btn primary">${initializing ? i18nText("初始化 ZQ-CfGit") : i18nText("登录")} →</button></form></section></main>`;
   bindForm("#login-form", async (data) => {
     if (initializing) {
       await api("/setup", { method: "POST", body: data });
@@ -305,7 +305,7 @@ async function projects(version) {
   );
   if (version !== routeVersion) return;
   layout(
-    i18nHTML`<div class="titlebar"><div><h1>项目</h1><p class="muted">每一个想法，都从一个仓库开始。</p></div>${user ? link("/new", icon("plus") + i18nText("新建项目"), "btn primary") : link("/login", i18nText("登录以创建项目"), "btn primary")}</div><div class="stats"><div class="stat"><div class="muted">当前列表</div><div class="number">${repositories.length}<span>个项目</span></div></div><div class="stat"><div class="muted">公开项目</div><div class="number">${repositories.filter((r) => r.visibility === "public").length}<span>开放协作</span></div></div><div class="stat"><div class="muted">私有项目</div><div class="number">${repositories.filter((r) => r.visibility === "private").length}<span>受控访问</span></div></div></div><form class="toolbar" id="search"><div class="search"><input name="q" value="${esc(q)}" placeholder="搜索项目名称或描述…" aria-label="搜索项目"></div><button class="btn" type="submit">搜索</button></form><div class="panel"><div class="panelhead"><strong>${q ? i18nText("搜索结果") : i18nText("所有可访问项目")}</strong><span class="muted">${repositories.length} 个项目</span></div>${repositories.length ? repositories.map((r) => i18nHTML`<article class="repo-row"><div class="repo-icon">${icon("repo")}</div><div class="repo-info">${link(`/${r.namespace}/${encodeURIComponent(r.name)}`, `<span class="namespace">${esc(r.namespace)} / </span>${esc(r.name)}`, "repo-name")}${r.archived_at ? '<span class="pill archived">' + i18nText("已归档") + "</span>" : ""}<p>${esc(r.description || i18nText("这个项目还没有描述。"))}</p><div class="rowmeta"><span><i class="dot"></i>Git</span><span>${esc(r.default_branch)}</span><span>创建于 ${date(r.created_at)}</span></div></div><span class="pill">${r.visibility === "private" ? i18nText("私有") : i18nText("公开")}</span></article>`).join("") : `<div class="empty">${icon("repo")}<h2>${q ? i18nText("没有找到匹配的项目") : i18nText("让第一个想法落地")}</h2><p>${q ? i18nText("试试其他项目名称或描述关键词。") : i18nText("创建一个仓库，用 Git 推送代码，邀请伙伴一起构建。")}</p>${user && !q ? link("/new", i18nText("创建第一个项目"), "btn primary") : ""}</div>`}</div><div class="page-nav">${page > 0 ? link(`/?page=${page - 1}&q=${encodeURIComponent(q)}${namespaceQuery()}`, i18nText("← 上一页"), "btn small") : "<span></span>"}${repositories.length === 50 ? link(`/?page=${page + 1}&q=${encodeURIComponent(q)}${namespaceQuery()}`, i18nText("下一页 →"), "btn small") : ""}</div><p class="footer-note">你的代码，存放在你自己的 Cloudflare 账户。</p>`,
+    i18nHTML`<div class="titlebar"><div><h1>项目</h1><p class="muted">每一个想法，都从一个仓库开始。</p></div>${user ? link("/new", icon("plus") + i18nText("新建项目"), "btn primary") : link("/login", i18nText("登录以创建项目"), "btn primary")}</div><form class="toolbar" id="search"><div class="search"><input name="q" value="${esc(q)}" placeholder="搜索项目名称或描述…" aria-label="搜索项目"></div><button class="btn" type="submit">搜索</button></form><div class="panel"><div class="panelhead"><strong>${q ? i18nText("搜索结果") : i18nText("所有可访问项目")}</strong><span class="muted">${repositories.length} 个项目</span></div>${repositories.length ? repositories.map((r) => i18nHTML`<article class="repo-row"><div class="repo-icon">${icon("repo")}</div><div class="repo-info">${link(`/${r.namespace}/${encodeURIComponent(r.name)}`, `<span class="namespace">${esc(r.namespace)} / </span>${esc(r.name)}`, "repo-name")}${r.archived_at ? '<span class="pill archived">' + i18nText("已归档") + "</span>" : ""}<p>${esc(r.description || i18nText("这个项目还没有描述。"))}</p><div class="rowmeta"><span><i class="dot"></i>Git</span><span>${esc(r.default_branch)}</span><span>创建于 ${date(r.created_at)}</span></div></div></article>`).join("") : `<div class="empty">${icon("repo")}<h2>${q ? i18nText("没有找到匹配的项目") : i18nText("让第一个想法落地")}</h2><p>${q ? i18nText("试试其他项目名称或描述关键词。") : i18nText("创建一个仓库，用 Git 推送代码。")}</p>${user && !q ? link("/new", i18nText("创建第一个项目"), "btn primary") : ""}</div>`}</div><div class="page-nav">${page > 0 ? link(`/?page=${page - 1}&q=${encodeURIComponent(q)}${namespaceQuery()}`, i18nText("← 上一页"), "btn small") : "<span></span>"}${repositories.length === 50 ? link(`/?page=${page + 1}&q=${encodeURIComponent(q)}${namespaceQuery()}`, i18nText("下一页 →"), "btn small") : ""}</div><p class="footer-note">你的代码，存放在你自己的 Cloudflare 账户。</p>`,
   );
   document.querySelector("#search").onsubmit = (e) => {
     e.preventDefault();
@@ -319,7 +319,7 @@ async function projects(version) {
 async function newProject() {
   if (!user) return go("/login");
   layout(
-    i18nHTML`<div class="titlebar"><div><h1>新建项目</h1><p class="muted">为下一件值得构建的事，留一个位置。</p></div></div><div class="panel"><form class="form" id="create">${field(i18nText("项目名称"), "name", "text", "", i18nText("支持小写字母、数字、短横线、下划线和最多 5 层分组路径，例如 team/project。"))}${textarea(i18nText("项目描述"), "description")}<div class="inline"><div class="field"><label for="visibility">可见性</label><select id="visibility" name="visibility"><option value="private">私有 · 仅成员可访问</option><option value="public">公开 · 所有人可读取</option></select></div>${field(i18nText("默认分支"), "default_branch", "text", "main")}</div><button type="submit" class="btn primary">创建项目</button></form></div>`,
+    i18nHTML`<div class="titlebar"><div><h1>新建项目</h1><p class="muted">为下一件值得构建的事，留一个位置。</p></div></div><div class="panel"><form class="form" id="create">${field(i18nText("项目名称"), "name", "text", "", i18nText("支持小写字母、数字、短横线和下划线。"))}${textarea(i18nText("项目描述"), "description")}${field(i18nText("默认分支"), "default_branch", "text", "main")}<button type="submit" class="btn primary">创建项目</button></form></div>`,
     i18nText("新建项目"),
   );
   bindForm("#create", async (data) => {
@@ -333,12 +333,12 @@ function repoLayout(r, tab, content, actions = "") {
   if (user) selectedSpace = r.namespace;
   const base = `/${r.namespace}/${encodeURIComponent(r.name)}`;
   layout(
-    i18nHTML`<div class="titlebar"><div><div class="inline"><h1>${esc(r.name)}</h1><span class="pill">${r.visibility === "public" ? i18nText("公开") : i18nText("私有")}</span></div><p class="muted">${esc(r.description || i18nText("添加描述，让伙伴了解这个项目。"))}</p></div>${actions}</div><nav class="tabs" aria-label="项目导航">${[
+    i18nHTML`<div class="titlebar"><div><div class="inline"><h1>${esc(r.name)}</h1></div><p class="muted">${esc(r.description || i18nText("添加项目描述。"))}</p></div>${actions}</div><nav class="tabs" aria-label="项目导航">${[
       ["code", i18nText("代码"), ""],
       ["commits", i18nText("提交"), "/commits"],
       ["forge", i18nText("Git 工具"), "/forge"],
       ["search", i18nText("搜索"), "/search"],
-      ...(["owner", "maintainer"].includes(r.role)
+      ...(r.role === "owner"
         ? [["settings", i18nText("设置"), "/settings"]]
         : []),
     ]
@@ -361,8 +361,7 @@ function copyButton(value, id = "copy") {
     }
   });
 }
-const writeable = (r) =>
-  !r.archived_at && ["owner", "maintainer", "developer"].includes(r.role);
+const writeable = (r) => !r.archived_at && r.role === "owner";
 async function codePage(r, base, ap, version) {
   const params = new URLSearchParams(location.search),
     p = params.get("path") || "",
@@ -377,7 +376,7 @@ async function codePage(r, base, ap, version) {
   r = { ...r, default_branch };
   if (version !== routeVersion) return;
   const clone = i18nHTML`<button class="btn" id="copy">克隆地址 ↗</button>`;
-  const aside = i18nHTML`<aside class="aside"><section><h3>关于项目</h3><p class="muted">${esc(r.description || i18nText("暂无描述"))}</p><span class="pill">${r.visibility === "public" ? i18nText("公开仓库") : i18nText("私有仓库")}</span></section><section><h3>使用 Git 克隆</h3><code>${esc(r.clone_url)}</code><p class="muted">HTTPS 凭证：用户名 + 访问令牌</p>${link("/settings/tokens", i18nText("管理访问令牌 →"))}</section><section><h3>仓库详情</h3><p class="muted">${branches.length} 个分支<br>默认分支 ${esc(r.default_branch)}<br>创建于 ${date(r.created_at)}</p></section></aside>`;
+  const aside = i18nHTML`<aside class="aside"><section><h3>关于项目</h3><p class="muted">${esc(r.description || i18nText("暂无描述"))}</p></section><section><h3>使用 Git 克隆</h3><code>${esc(r.clone_url)}</code><p class="muted">HTTPS 凭证：用户名 + 访问令牌</p>${link("/settings/tokens", i18nText("管理访问令牌 →"))}</section><section><h3>仓库详情</h3><p class="muted">${branches.length} 个分支<br>默认分支 ${esc(r.default_branch)}<br>创建于 ${date(r.created_at)}</p></section></aside>`;
   if (!branches.length) {
     repoLayout(
       r,
@@ -423,7 +422,7 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
   if (notebook) {
     try {
       const { mountNotebook } =
-        await import("./notebook.js?v=3b66a13a8dab8c50");
+        await import("./notebook.js?v=55cd875ba22bef16");
       if (version !== routeVersion || !notebook.isConnected) return;
       mountNotebook(notebook, data.content, { base, ref: data.ref, path: p });
     } catch {
@@ -606,12 +605,11 @@ async function commitPage(r, base, ap, version, sha) {
   );
 }
 async function settingsPage(r, base, ap, version) {
-  const { events } = await api(ap + "/audit");
   if (version !== routeVersion) return;
   repoLayout(
     r,
     "settings",
-    i18nHTML`<div class="stack">${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="project-lifecycle"><h2>${r.archived_at ? i18nText("恢复项目") : i18nText("归档项目")}</h2><p class="muted">归档后可继续 clone、下载和读取历史，但停止写入。</p><button type="submit" class="btn">${r.archived_at ? i18nText("取消归档") : i18nText("归档为只读")}</button></form></div>` : ""}${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">重命名项目</summary><form class="form" id="project-transfer">${field(i18nText("目标项目名"), "name", "text", r.name)}<button class="btn" type="submit">重命名</button></form></details>` : ""}${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="github-sync"><h2>从 GitHub 同步</h2><div class="field"><label for="sync-source">GitHub 仓库</label><input id="sync-source" name="source" type="text" value="${esc(r.base_repo || "")}" placeholder="owner/name，例如 bayueqi/my-repo" required></div><button class="btn" type="submit">同步最新代码</button></form></div>` : ""}<div class="panel"><form class="form" id="repo-settings"><h2>项目设置</h2>${textarea(i18nText("项目描述"), "description", r.description)}${field(i18nText("默认分支"), "default_branch", "text", r.default_branch)}<div class="field"><label for="visibility">可见性</label><select name="visibility" id="visibility"><option value="private" ${r.visibility === "private" ? "selected" : ""}>私有 · 仅成员可访问</option><option value="public" ${r.visibility === "public" ? "selected" : ""}>公开 · 所有人可读取</option></select></div><button class="btn primary" type="submit">保存设置</button></form></div><div class="panel"><div class="panelhead"><strong>审计记录</strong><span class="muted">最近 100 条</span></div>${events.map((e) => `<div class="token-row"><div><strong>${esc(e.action)}</strong><p class="muted">${esc(e.actor || "system")} · ${esc(e.detail)}</p></div><span class="muted">${date(e.created_at)}</span></div>`).join("")}</div></div>`,
+    i18nHTML`<div class="stack">${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="project-lifecycle"><h2>${r.archived_at ? i18nText("恢复项目") : i18nText("归档项目")}</h2><p class="muted">归档后可继续 clone、下载和读取历史，但停止写入。</p><button type="submit" class="btn">${r.archived_at ? i18nText("取消归档") : i18nText("归档为只读")}</button></form></div>` : ""}${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">重命名项目</summary><form class="form" id="project-transfer">${field(i18nText("目标项目名"), "name", "text", r.name)}<button class="btn" type="submit">重命名</button></form></details>` : ""}${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="github-sync"><h2>从 GitHub 同步</h2><div class="field"><label for="sync-source">GitHub 仓库</label><input id="sync-source" name="source" type="text" value="${esc(r.base_repo || "")}" placeholder="owner/name，例如 bayueqi/my-repo" required></div><button class="btn" type="submit">同步最新代码</button></form></div>` : ""}<div class="panel"><form class="form" id="repo-settings"><h2>项目设置</h2>${textarea(i18nText("项目描述"), "description", r.description)}${field(i18nText("默认分支"), "default_branch", "text", r.default_branch)}<button class="btn primary" type="submit">保存设置</button></form></div></div>`,
   );
   bindForm("#project-transfer", async (data) => {
     const result = await api(ap + "/transfer", {

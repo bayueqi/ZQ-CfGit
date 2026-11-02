@@ -12,7 +12,7 @@ import {
   LIMITS,
 } from "./objects";
 import { fail } from "../security";
-import { base64, unbase64, commitSignature } from "./signatures";
+import { unbase64 } from "./signatures";
 import {
   paginate,
   PageOptions,
@@ -73,8 +73,7 @@ export class ForgeRepository extends GitRepository {
       a = parseIdentity(c.author),
       committer = parseIdentity(
         headers.find((l) => l.startsWith("committer "))!.slice(10),
-      ),
-      sig = commitSignature(o);
+      );
     return {
       sha,
       tree_sha: c.tree,
@@ -87,13 +86,6 @@ export class ForgeRepository extends GitRepository {
       committer_email: committer.email,
       date: committer.date,
       raw_date: committer.date,
-      ...(sig.signature
-        ? {
-            signature: sig.signature,
-            payload: text(sig.payload),
-            payload_base64: base64(sig.payload),
-          }
-        : {}),
     };
   }
   async commitHistory(ref = "HEAD", path?: string) {
