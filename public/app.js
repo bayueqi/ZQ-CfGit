@@ -347,7 +347,7 @@ function repoLayout(r, tab, content, actions = "") {
       )
       .join(
         "",
-      )}</nav>${r.archived_at ? i18nText('<div class="info" role="status">此项目已归档：代码与历史记录可读，协作写入和流水线已暂停。项目所有者可在设置中恢复。</div>') : ""}${content}`,
+      )}</nav>${r.archived_at ? i18nText('<div class="info" role="status">此项目已归档：代码与历史记录可读，写入已暂停。可在设置中恢复。</div>') : ""}${content}`,
     `${r.namespace} / ${r.name}`,
   );
 }
