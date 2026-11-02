@@ -555,7 +555,7 @@ async function commitsPage(r, base, ap, version) {
   repoLayout(
     r,
     "commits",
-    i18nHTML`<div class="panel"><div class="panelhead"><strong>最近提交</strong><span class="muted">${esc(r.default_branch)}</span></div>${commits.map((c) => link(base + "/commits/" + c.sha, `<span class="avatar">${esc(c.author[0])}</span><div class="repo-info"><strong>${esc(c.message)}</strong><p>${esc(c.author)} · ${date(c.date)}</p></div><code>${c.sha.slice(0, 8)}</code>`, "repo-row")).join("")}</div>`,
+    i18nHTML`<div class="panel"><div class="panelhead"><strong>最近提交</strong><span class="muted">${esc(r.default_branch)}</span></div>${commits.length ? commits.map((c) => link(base + "/commits/" + c.sha, `<span class="avatar">${esc(c.author[0])}</span><div class="repo-info"><strong>${esc(c.message)}</strong><p>${esc(c.author)} · ${date(c.date)}</p></div><code>${c.sha.slice(0, 8)}</code>`, "repo-row")).join("") : `<div class="empty"><h2>暂无提交记录</h2></div>`}</div>`,
   );
 }
 function diffRows(patch) {

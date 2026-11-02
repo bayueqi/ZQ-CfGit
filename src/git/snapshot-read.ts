@@ -150,6 +150,13 @@ export async function repositoryRead(
     case "/blob":
       return Response.json(await repo.blob(ref, file));
     case "/commits":
+      if (!repo.listBranches({ limit: 1 }).branches.length)
+        return Response.json({
+          commits: [],
+          next_cursor: null,
+          has_more: false,
+          ref: null,
+        });
       return Response.json(
         await repo.listCommits({ ...page, ref, path: q.path }),
       );
