@@ -2,7 +2,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 export const slug = z
   .string()
-  .regex(/^[a-z0-9][a-z0-9_-]{0,47}$/)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$/)
   .refine(
     (s) =>
       ![
@@ -16,7 +16,7 @@ export const slug = z
         "spaces",
         "login",
         "mcp",
-      ].includes(s),
+      ].includes(s.toLowerCase()),
     "Reserved name",
   );
 export const repoName = z

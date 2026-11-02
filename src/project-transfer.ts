@@ -8,8 +8,7 @@ export async function renameProject(
   name: string,
   revision: number,
 ) {
-  if (repo.name.toLowerCase() === name.toLowerCase())
-    fail(400, "Project already has this address");
+  if (repo.name === name) fail(400, "Project already has this address");
   const guard = crypto.randomUUID();
   try {
     await env.DB.batch([

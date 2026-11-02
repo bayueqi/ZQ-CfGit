@@ -5,12 +5,38 @@
 ## 功能
 
 - 仓库托管：HTTPS clone / push / fetch，分支、标签、Git LFS
-- 代码浏览：提交历史、Diff、Blame、语法高亮、Markdown / 图片 / Notebook 预览
-- 搜索：仓库内文件名与代码内容检索
-- 协作：议题、标签、里程碑、合并请求与行级讨论、版本发布、维基
-- 接口：REST API、MCP 端点、个人访问令牌
+- 代码浏览：提交历史、Diff、语法高亮，Markdown / 图片 / Notebook 预览
+- 搜索：仓库内代码内容检索
+- 在线编辑：直接在网页新建、修改文件并提交
+- 备份同步：从 GitHub 拉取最新代码快照，覆盖式同步到本服务
+- 接口：REST API、个人访问令牌
 
 单用户部署，没有团队与多账号管理。
+
+## 使用
+
+### 从 GitHub 同步仓库
+
+1. 新建项目，进入该项目的「设置」页。
+2. 在「从 GitHub 同步」输入框填入 `owner/name`，例如 `bayueqi/ZQ-CfGit`。
+3. 点「同步最新代码」。会下载 GitHub 默认分支的最新快照并覆盖本仓库内容。
+
+同步只保留最新代码快照，不保留 commit 历史与 issue 等数据，适合做代码备份。
+
+### 用 Git 克隆与推送
+
+仓库页点「克隆地址」复制 HTTPS 地址。推送和克隆需要认证：
+
+```
+git clone https://<站点地址>/<用户名>/<仓库名>.git
+git push origin main
+```
+
+HTTPS 凭证用「用户名 + 访问令牌」：用户名为你的账号名，密码填访问令牌。
+
+### 访问令牌
+
+顶栏「访问令牌」页创建，可选只读（read）或可写（write）权限。令牌用于 Git 认证和 API 调用，API 请求头格式为 `Authorization: Bearer <令牌>`。
 
 ## 部署
 
@@ -61,8 +87,8 @@ npx wrangler secret put BOOTSTRAP_SECRET  # openssl rand -hex 32
 
 | 绑定 | 类型 | 指向 | 作用 |
 |---|---|---|---|
-| `DB` | D1 数据库 | `zq-cfgit` | 账号、仓库索引、议题、合并请求等元数据 |
-| `OBJECTS` | R2 桶 | `zq-cfgit-objects` | Git 对象、LFS 文件、附件 |
+| `DB` | D1 数据库 | `zq-cfgit` | 账号与仓库元数据 |
+| `OBJECTS` | R2 桶 | `zq-cfgit-objects` | Git 对象、LFS 文件 |
 | `REPOSITORIES` | Durable Object | 类 `Repository`，每个仓库一个实例 | 串行化引用更新、暂存待发布的对象、保存每个仓库的引用表 |
 | `ASSETS` | Static Assets | `./public` | 前端页面与静态文件。`run_worker_first: true` 使 Worker 先处理路由，未命中的路径回落到 `index.html` |
 
@@ -74,13 +100,13 @@ npx wrangler secret put BOOTSTRAP_SECRET  # openssl rand -hex 32
 
 ## 初始化
 
-打开站点，填初始化密钥、用户名、密码（至少 12 位）。用户名字段按 `^[a-z0-9][a-z0-9_-]{0,47}$` 校验，`admin`、`api` 等保留名不可用。创建成功后 D1 会锁定初始化，之后可以在 Worker 设置里删除 `BOOTSTRAP_SECRET`。
+打开站点，填初始化密钥、用户名、密码（至少 12 位）。用户名字段按 `^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$` 校验，`admin`、`api` 等保留名不可用。创建成功后 D1 会锁定初始化，之后可以在 Worker 设置里删除 `BOOTSTRAP_SECRET`。
 
 ## 容量限制
 
 单次传输的 pack 上限 64 MiB，单个文件 24 MiB，单个 pack 最多 2 万个对象。超限的仓库无法导入也无法推送，这是纯 JavaScript 在 128 MB 内存里解析 pack 决定的，调高常量只会触发内存超限。大仓库建议只推送最新快照，或先清理历史中的大文件。
 
-D1 免费额度为每天 10 万行写入、500 万行读取，账户级共享，UTC 午夜重置。配额耗尽时迁移与写入会失败，接口返回 500，等待重置后重试即可。
+D1 免费额度为每天 10 万行写入、500 万行读取，账户级共享，UTC 午夜重置。配额耗尽时写入会失败，接口返回 500，等待重置后重试即可。
 
 ## 备份
 

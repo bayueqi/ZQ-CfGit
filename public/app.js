@@ -240,7 +240,7 @@ const link = (path, label, cls = "") =>
 function layout(content, crumb = i18nText("项目")) {
   const heading = (crumb || "").trim() || i18nText("项目");
   document.title = heading + " · ZQ-CfGit";
-  root.innerHTML = i18nHTML`<main class="main"><header class="topbar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="breadcrumb"><span>${esc(heading)}</span></div><div class="right">${link("/", i18nText("项目"), "toplink")}${user ? link("/settings/tokens", i18nText("访问令牌"), "toplink") : ""}${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main>`;
+  root.innerHTML = i18nHTML`<main class="main"><header class="topbar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="breadcrumb"><span>${esc(heading)}</span></div><div class="right">${link("/", i18nText("项目"), "toplink")}${user ? link("/settings/tokens", i18nText("访问令牌"), "toplink") : ""}${user ? i18nHTML`<button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main>`;
   document.querySelector("#logout")?.addEventListener("click", async () => {
     await api("/logout", { method: "POST" });
     user = null;
