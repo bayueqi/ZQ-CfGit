@@ -364,48 +364,6 @@ button.text:hover {
   line-height: 1;
 }
 
-.pill.green {
-  color: var(--ok);
-  background: var(--ok-soft);
-  border-color: #cdeadb;
-}
-
-.pill.orange {
-  color: var(--warn);
-  background: var(--warn-soft);
-  border-color: #f6dcb6;
-}
-
-.pill.purple {
-  color: #6e46a8;
-  background: #f4effb;
-  border-color: #e1d4f2;
-}
-
-.pill.ci-succeeded {
-  color: var(--ok);
-  background: var(--ok-soft);
-  border-color: #cdeadb;
-}
-
-.pill.ci-failed {
-  color: var(--danger);
-  background: var(--danger-soft);
-  border-color: #f5cfc9;
-}
-
-.pill.ci-running {
-  color: #1b4fa8;
-  background: #eef4fe;
-  border-color: #d3e0f8;
-}
-
-.pill.ci-canceled {
-  color: #5a6472;
-  background: #f1f3f6;
-  border-color: #e2e6ec;
-}
-
 /* ============================================================
    主体容器
    ============================================================ */
@@ -1157,29 +1115,12 @@ pre {
   color: #96520a;
 }
 
-.code-input,
 .editor {
   min-height: 300px;
   font:
     12.5px/1.65 ui-monospace,
     Menlo,
     monospace;
-}
-
-.forge-output {
-  max-height: 400px;
-  max-width: 100%;
-  overflow: auto;
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: #0f141b;
-  color: #cfe0d6;
-  font-size: 12px;
-  white-space: pre;
-}
-
-.forge-output:empty {
-  display: none;
 }
 
 .forge-grid {
@@ -1191,20 +1132,6 @@ pre {
 
 .forge-grid > .panel {
   margin: 0;
-}
-
-.ci-log {
-  min-height: 160px;
-  max-height: 62vh;
-  padding: 14px 16px;
-  border-radius: 10px;
-  background: #0d1117;
-  color: #d8e3f0;
-  overflow: auto;
-  font-size: 12.5px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 .diff {
@@ -1238,22 +1165,12 @@ pre {
   word-break: break-all;
 }
 
-.recovery-key {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  user-select: all;
-}
-
 /* ============================================================
    表单
    ============================================================ */
 .form {
   padding: 22px;
   max-width: 700px;
-}
-
-.form [data-ci-source][hidden] {
-  display: none;
 }
 
 .form label,
@@ -1561,30 +1478,6 @@ select:focus {
   color: var(--accent);
 }
 
-.authenticator-qr {
-  display: block;
-  width: 220px;
-  height: 220px;
-  max-width: 100%;
-  margin: 14px 0;
-  border-radius: 10px;
-  background: #fff;
-  object-fit: contain;
-}
-
-#enrollment pre,
-#recovery-result pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-#recovery-result:not(:empty) {
-  margin-top: 16px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-
 /* ============================================================
    详情 / 上下文 / diff
    ============================================================ */
@@ -1605,43 +1498,6 @@ select:focus {
   margin: 0;
   font-size: 13.5px;
   white-space: pre-wrap;
-}
-
-.issue-row {
-  display: flex;
-  gap: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line-2);
-}
-
-.issue-row:last-child {
-  border-bottom: 0;
-}
-
-.issue-row .subject {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.issue-row .muted {
-  margin-top: 4px;
-  font-size: 12px;
-}
-
-.status-icon {
-  font-size: 17px;
-  line-height: 1.4;
-  color: #29915f;
-  flex-shrink: 0;
-}
-
-.status-icon.closed {
-  color: #8a63b3;
-}
-
-.discussion {
-  border-top: 1px solid var(--line-2);
 }
 
 .review-diff {
@@ -1680,18 +1536,9 @@ select:focus {
   background: #fdeaea;
 }
 
-.diff-line-number {
-  padding: 0 2px;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-
-.diff-line-number:hover {
-  color: #6d46cc;
-  text-decoration: underline;
+.review-diff-row.hunk {
+  background: var(--surface-2);
+  color: var(--muted-2);
 }
 
 .image-preview {
@@ -1820,156 +1667,6 @@ select:focus {
   font-family: inherit;
   font-size: 14px;
   line-height: 1.8;
-}
-
-/* ============================================================
-   Issues / 看板
-   ============================================================ */
-.issue-card {
-  display: flex;
-  gap: 10px;
-  min-width: 0;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line-2);
-}
-
-.issue-card > div {
-  flex: 1;
-  min-width: 0;
-}
-
-.issue-card .subject {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-
-.issue-card p {
-  margin: 6px 0;
-  font-size: 12.5px;
-  color: var(--muted);
-}
-
-.issue-card input[type="checkbox"] {
-  width: auto;
-  height: auto;
-  align-self: flex-start;
-  margin-top: 2px;
-}
-
-.issue-labels {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.issue-filters .inline {
-  align-items: flex-end;
-  flex-wrap: wrap;
-}
-
-.issue-filters .inline > label {
-  flex: 1;
-  min-width: 140px;
-}
-
-.issue-board {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  padding-bottom: 16px;
-  overflow-x: auto;
-}
-
-.board-column {
-  flex: 0 0 282px;
-  min-height: 180px;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: #f7f8fa;
-}
-
-.board-column h3 {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin: 0 0 10px;
-  font-size: 12.5px;
-  font-weight: 620;
-  color: var(--muted);
-}
-
-.board-cards .issue-card {
-  margin-bottom: 8px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
-
-.board-cards [draggable="true"] {
-  cursor: grab;
-}
-
-.board-cards select {
-  width: 100%;
-  height: 32px;
-  margin-top: 4px;
-  font-size: 12.5px;
-}
-
-/* ============================================================
-   搜索
-   ============================================================ */
-.search-form {
-  padding: 18px 20px;
-  margin-bottom: 16px;
-}
-
-.search-filters {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.search-form .field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0 0 14px;
-}
-
-.search-result {
-  padding: 16px 18px;
-  border-top: 1px solid var(--line-2);
-  overflow-wrap: anywhere;
-}
-
-.search-result:first-of-type {
-  border-top: 0;
-}
-
-.search-result h2 {
-  margin: 6px 0;
-  font-size: 15px;
-}
-
-.search-result p {
-  margin: 0;
-  font-size: 13px;
-  color: var(--muted);
-  white-space: pre-wrap;
-}
-
-.search-result mark {
-  padding: 1px 2px;
-  border-radius: 3px;
-  background: #fdeeb0;
-  color: #4a3600;
 }
 
 /* ============================================================
@@ -2304,8 +2001,7 @@ select:focus {
     padding: 11px 13px;
   }
 
-  .form,
-  .search-form {
+  .form {
     padding: 16px;
   }
 
@@ -2345,26 +2041,14 @@ select:focus {
     padding: 32px 20px 48px;
   }
 
-  .search-filters {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .notebook-cell,
   .notebook-toolbar,
   .notebook-summary {
     padding: 12px;
   }
-
-  .board-column {
-    flex: 0 0 250px;
-  }
 }
 
 @media (max-width: 480px) {
-  .search-filters {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .stats {
     grid-template-columns: minmax(0, 1fr);
   }

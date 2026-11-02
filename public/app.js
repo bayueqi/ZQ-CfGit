@@ -2,13 +2,11 @@ import {
   text as i18nText,
   html as i18nHTML,
   getLocale,
-  datetime as i18nTime,
   errorText,
   relativeTime,
-  state as i18nState,
-} from "./i18n.js?v=d3f79f520bea2922";
-const account = () => import("./account.js?v=8373b7dd1b692504");
-import { forgePage } from "./forge.js?v=00b21e1eb8b1df70";
+} from "./i18n.js?v=421b50bfc6caff1b";
+const account = () => import("./account.js?v=3886853f6c7d7825");
+import { forgePage } from "./forge.js?v=cbc2ff76ae95571e";
 const root = document.querySelector("#app");
 const esc = (x) =>
   String(x ?? "").replace(
@@ -430,7 +428,7 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
   if (notebook) {
     try {
       const { mountNotebook } =
-        await import("./notebook.js?v=4a4878c8b4ee45a2");
+        await import("./notebook.js?v=3f0df4ba64898d9b");
       if (version !== routeVersion || !notebook.isConnected) return;
       mountNotebook(notebook, data.content, { base, ref: data.ref, path: p });
     } catch {
@@ -557,7 +555,59 @@ async function commitsPage(r, base, ap, version) {
   repoLayout(
     r,
     "commits",
-    i18nHTML`<div class="panel"><div class="panelhead"><strong>最近提交</strong><span class="muted">${esc(r.default_branch)}</span></div>${commits.map((c) => `<div class="repo-row"><span class="avatar">${esc(c.author[0])}</span><div class="repo-info"><strong>${esc(c.message)}</strong><p>${esc(c.author)} · ${date(c.date)}</p></div><code>${c.sha.slice(0, 8)}</code></div>`).join("")}</div>`,
+    i18nHTML`<div class="panel"><div class="panelhead"><strong>最近提交</strong><span class="muted">${esc(r.default_branch)}</span></div>${commits.map((c) => link(base + "/commits/" + c.sha, `<span class="avatar">${esc(c.author[0])}</span><div class="repo-info"><strong>${esc(c.message)}</strong><p>${esc(c.author)} · ${date(c.date)}</p></div><code>${c.sha.slice(0, 8)}</code>`, "repo-row")).join("")}</div>`,
+  );
+}
+function diffRows(patch) {
+  const lines = String(patch || "").split("\n");
+  let out = "",
+    oldNo = 0,
+    newNo = 0;
+  for (const line of lines) {
+    if (!line) continue;
+    if (line.startsWith("@@")) {
+      const m = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+      if (m) {
+        oldNo = +m[1];
+        newNo = +m[2];
+      }
+      out += `<div class="review-diff-row hunk"><span></span><span></span><code>${esc(line)}</code></div>`;
+    } else if (line.startsWith("+") && !line.startsWith("+++")) {
+      out += `<div class="review-diff-row added"><span></span><span>${newNo++}</span><code>${esc(line)}</code></div>`;
+    } else if (line.startsWith("-") && !line.startsWith("---")) {
+      out += `<div class="review-diff-row removed"><span>${oldNo++}</span><span></span><code>${esc(line)}</code></div>`;
+    } else if (
+      line.startsWith("diff --git") ||
+      line.startsWith("index ") ||
+      line.startsWith("new file mode") ||
+      line.startsWith("deleted file mode") ||
+      line.startsWith("old mode") ||
+      line.startsWith("new mode") ||
+      line.startsWith("---") ||
+      line.startsWith("+++") ||
+      line.startsWith("\\")
+    ) {
+      continue;
+    } else {
+      out += `<div class="review-diff-row"><span>${oldNo++}</span><span>${newNo++}</span><code>${esc(line)}</code></div>`;
+    }
+  }
+  return out;
+}
+async function commitPage(r, base, ap, version, sha) {
+  const [{ commit }, diff] = await Promise.all([
+    api(ap + "/commit?sha=" + encodeURIComponent(sha)),
+    api(ap + "/diff?sha=" + encodeURIComponent(sha)),
+  ]);
+  if (version !== routeVersion) return;
+  const msg = String(commit.message || "").split("\n"),
+    title = msg[0] || "",
+    body = msg.slice(1).join("\n").trim(),
+    statusText = { added: "新增", deleted: "删除", modified: "修改" };
+  repoLayout(
+    r,
+    "commits",
+    i18nHTML`<div class="panel"><div class="panelhead"><strong>${esc(title)}</strong><code>${esc(commit.sha.slice(0, 8))}</code></div><p class="muted" style="padding:0 16px;margin:14px 0 0">${esc(commit.author_name)} 提交于 ${date(commit.date)}${commit.parent_shas?.length ? " · 父提交 " + commit.parent_shas.map((p) => link(base + "/commits/" + p, p.slice(0, 8))).join(", ") : ""}</p>${body ? `<pre style="padding:0 16px 16px">${esc(body)}</pre>` : '<div style="height:14px"></div>'}</div><div class="panel"><div class="panelhead"><strong>变更</strong><span class="muted">${diff.stats.files} 个文件 · +${diff.stats.additions} −${diff.stats.deletions}</span></div>${diff.files.length ? diff.files.map((f) => `<div class="panelhead" style="border-top:1px solid var(--line)"><span class="pill">${esc(statusText[f.status] || f.status)}</span><code>${esc(f.path)}</code></div>${f.binary ? '<p class="muted" style="padding:0 16px 16px">二进制文件</p>' : `<div class="review-diff">${diffRows(f.patch)}</div>`}`).join("") : '<div class="empty"><p>无文件变更</p></div>'}</div>`,
   );
 }
 async function settingsPage(r, base, ap, version) {
@@ -609,7 +659,7 @@ async function tokensPage(version) {
   const { tokens } = await api("/tokens");
   if (version !== routeVersion) return;
   layout(
-    i18nHTML`<div class="titlebar"><div><h1>访问令牌</h1><p class="muted">为 Git 客户端和自动化工具创建凭证。</p></div></div><div class="info">Git 通过 HTTPS 使用你的用户名和令牌认证。令牌只显示一次；可随时撤销。</div><div id="token-result"></div><div class="stack"><details class="panel"><summary class="panelhead">修改账号密码</summary><form class="form" id="change-password">${field(i18nText("当前密码"), "current_password", "password")}${field(i18nText("新密码"), "new_password", "password", "", i18nText("修改后将撤销所有会话与访问令牌，需要重新登录。"))}<label>双重验证码（已启用时填写）<input name="otp" maxlength="64" autocomplete="one-time-code"></label><button type="submit" class="btn primary">修改密码</button></form></details><div class="panel"><form class="form" id="new-token"><h2>创建令牌</h2>${field(i18nText("名称"), "name", "text", "", i18nText("例如：MacBook、CI read-only"))}<div class="inline"><div class="field"><label for="scope">权限</label><select id="scope" name="scope"><option value="write">读写 · 使用账号已有权限</option><option value="read">只读</option></select></div><div class="field"><label for="days">有效期</label><select id="days" name="days"><option value="30">30 天</option><option value="90" selected>90 天</option><option value="365">365 天</option></select></div></div><label>双重验证码（已启用时填写）<input name="otp" maxlength="64" autocomplete="one-time-code"></label><button class="btn primary" type="submit">生成令牌</button></form></div><div class="panel"><div class="panelhead"><strong>已有令牌</strong></div>${tokens.length ? tokens.map((t) => i18nHTML`<div class="token-row"><div><strong>${esc(t.name)}</strong><p class="muted">${t.scope === "read" ? i18nText("只读") : i18nText("读写")} · 到期 ${new Date(t.expires_at).toLocaleDateString(getLocale())}</p></div><button class="btn small danger" data-revoke="${t.id}">撤销</button></div>`).join("") : i18nText('<div class="empty"><p>暂无访问令牌。</p></div>')}</div></div>`,
+    i18nHTML`<div class="titlebar"><div><h1>访问令牌</h1><p class="muted">为 Git 客户端和自动化工具创建凭证。</p></div></div><div class="info">Git 通过 HTTPS 使用你的用户名和令牌认证。令牌只显示一次；可随时撤销。</div><div id="token-result"></div><div class="stack"><details class="panel"><summary class="panelhead">修改账号密码</summary><form class="form" id="change-password">${field(i18nText("当前密码"), "current_password", "password")}${field(i18nText("新密码"), "new_password", "password", "", i18nText("修改后将撤销所有会话与访问令牌，需要重新登录。"))}<button type="submit" class="btn primary">修改密码</button></form></details><div class="panel"><form class="form" id="new-token"><h2>创建令牌</h2>${field(i18nText("名称"), "name", "text", "", i18nText("例如：MacBook、CI read-only"))}<div class="inline"><div class="field"><label for="scope">权限</label><select id="scope" name="scope"><option value="write">读写 · 使用账号已有权限</option><option value="read">只读</option></select></div><div class="field"><label for="days">有效期</label><select id="days" name="days"><option value="30">30 天</option><option value="90" selected>90 天</option><option value="365">365 天</option></select></div></div><button class="btn primary" type="submit">生成令牌</button></form></div><div class="panel"><div class="panelhead"><strong>已有令牌</strong></div>${tokens.length ? tokens.map((t) => i18nHTML`<div class="token-row"><div><strong>${esc(t.name)}</strong><p class="muted">${t.scope === "read" ? i18nText("只读") : i18nText("读写")} · 到期 ${new Date(t.expires_at).toLocaleDateString(getLocale())}</p></div><button class="btn small danger" data-revoke="${t.id}">撤销</button></div>`).join("") : i18nText('<div class="empty"><p>暂无访问令牌。</p></div>')}</div></div>`,
     i18nText("访问令牌"),
     "tokens",
   );
@@ -744,7 +794,10 @@ async function render() {
     else if (tab === "forge") await forgePage(r, base, ap, helpers);
     else if (tab === "search") await searchPage(r, base, ap, version);
     else if (tab === "edit") await editPage(r, base, ap, version);
-    else if (tab === "commits") await commitsPage(r, base, ap, version);
+    else if (tab === "commits")
+      sub
+        ? await commitPage(r, base, ap, version, sub)
+        : await commitsPage(r, base, ap, version);
     else if (tab === "settings") await settingsPage(r, base, ap, version);
     else throw Error(i18nText("页面不存在"));
     if (version === routeVersion)

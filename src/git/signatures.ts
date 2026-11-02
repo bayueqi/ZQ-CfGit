@@ -68,41 +68,6 @@ function sshKey(value: string) {
     fail(400, "Unsupported SSH key");
   return { raw, r, kind };
 }
-export async function signingKeyInfo(value: string) {
-  if (value.length > 65536) fail(413, "Signing key too large");
-  if (value.includes("PRIVATE KEY"))
-    fail(400, "Only public signing keys may be registered");
-  if (value.startsWith("-----BEGIN PGP PUBLIC KEY BLOCK-----")) {
-    const k = await readKey({ armoredKey: value });
-    if (k.isPrivate()) fail(400, "Private keys are not accepted");
-    await k.verifyPrimaryKey();
-    return { format: "openpgp", fingerprint: k.getFingerprint() };
-  }
-  const k = sshKey(value);
-  if (k.kind === "ssh-ed25519") {
-    if (k.r.field().length !== 32) fail(400, "Invalid Ed25519 key");
-  } else if (k.kind === "ssh-rsa") {
-    k.r.field();
-    if (unsigned(k.r.field()).length < 256)
-      fail(400, "RSA signing keys must be at least 2048 bits");
-  } else {
-    const curve = text(k.r.field());
-    if ("ecdsa-sha2-" + curve !== k.kind) fail(400, "SSH curve mismatch");
-    const q = k.r.field();
-    if (q[0] !== 4) fail(400, "Expected uncompressed EC point");
-  }
-  k.r.end();
-  return {
-    format: "ssh",
-    fingerprint:
-      "SHA256:" +
-      base64(
-        new Uint8Array(
-          await crypto.subtle.digest("SHA-256", k.raw as BufferSource),
-        ),
-      ).replace(/=+$/, ""),
-  };
-}
 /** Preserve the original byte payload, including non-ASCII messages and multiline headers. */
 export function commitSignature(o: GitObject) {
   const lines: { start: number; end: number; value: string }[] = [];

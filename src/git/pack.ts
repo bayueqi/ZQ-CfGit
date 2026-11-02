@@ -1,4 +1,4 @@
-import { Inflate, deflate } from "pako";
+import { Inflate } from "pako";
 import { HTTPException } from "hono/http-exception";
 import { fail } from "../security";
 import {
@@ -6,11 +6,9 @@ import {
   GitObject,
   ObjectType,
   concat,
-  bytes,
   text,
   sha1,
   toHex,
-  fromHex,
   makeObject,
 } from "./objects";
 const TYPES: Record<number, ObjectType> = {
@@ -243,34 +241,4 @@ export async function parsePack(
   }
   if (remaining.length) fail(400, "Delta chain too deep");
   return entries.map((e) => e.object!);
-}
-export async function writePack(objects: GitObject[]) {
-  if (objects.length > LIMITS.graph) fail(413, "Too many objects to fetch");
-  const header = new Uint8Array(12);
-  header.set(bytes("PACK"));
-  new DataView(header.buffer).setUint32(4, 2);
-  new DataView(header.buffer).setUint32(8, objects.length);
-  const parts = [header];
-  let total = 12;
-  for (const o of objects) {
-    let size = o.data.length;
-    const type = Object.entries(TYPES).find(([, name]) => name === o.type)![0];
-    let first = (Number(type) << 4) | (size & 15);
-    size = Math.floor(size / 16);
-    const h = [];
-    if (size) first |= 128;
-    h.push(first);
-    while (size) {
-      let b = size & 127;
-      size = Math.floor(size / 128);
-      if (size) b |= 128;
-      h.push(b);
-    }
-    const body = deflate(o.data);
-    total += h.length + body.length;
-    if (total > LIMITS.pack) fail(413, "Generated pack exceeds 16 MiB");
-    parts.push(Uint8Array.from(h), body);
-  }
-  const data = concat(...parts);
-  return concat(data, fromHex(await sha1(data)));
 }
