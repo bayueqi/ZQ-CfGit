@@ -735,15 +735,14 @@ app.post("/api/repos/:namespace/:repo/transfer", async (c) => {
   const b = await input(
     c,
     z.object({
-      namespace: slug,
-      name: repoName.optional(),
+      name: repoName,
       revision: z.number().int().min(0),
     }),
   );
   return c.json(
     await engineJSON(c, r, "/internal/transfer", {
-      ...b,
-      name: b.name || r.name,
+      name: b.name,
+      revision: b.revision,
       actor_id: requireUser(c).id,
     }),
   );

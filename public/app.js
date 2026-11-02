@@ -4,9 +4,9 @@ import {
   getLocale,
   errorText,
   relativeTime,
-} from "./i18n.js?v=421b50bfc6caff1b";
-const account = () => import("./account.js?v=3886853f6c7d7825");
-import { forgePage } from "./forge.js?v=cbc2ff76ae95571e";
+} from "./i18n.js?v=01bf2dfa21d8f5c0";
+const account = () => import("./account.js?v=124624e43ec30f03");
+import { forgePage } from "./forge.js?v=90ecf1a5f23d2bd9";
 const root = document.querySelector("#app");
 const esc = (x) =>
   String(x ?? "").replace(
@@ -428,7 +428,7 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
   if (notebook) {
     try {
       const { mountNotebook } =
-        await import("./notebook.js?v=3f0df4ba64898d9b");
+        await import("./notebook.js?v=b4577b9263734f9b");
       if (version !== routeVersion || !notebook.isConnected) return;
       mountNotebook(notebook, data.content, { base, ref: data.ref, path: p });
     } catch {
@@ -616,22 +616,17 @@ async function settingsPage(r, base, ap, version) {
   repoLayout(
     r,
     "settings",
-    i18nHTML`<div class="stack">${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="project-lifecycle"><h2>${r.archived_at ? i18nText("恢复项目") : i18nText("归档项目")}</h2><p class="muted">归档后可继续 clone、下载和读取历史，但停止写入。</p><button type="submit" class="btn">${r.archived_at ? i18nText("取消归档") : i18nText("归档为只读")}</button></form></div>` : ""}${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">转移或重命名项目</summary><form class="form" id="project-transfer">${field(i18nText("目标命名空间"), "namespace", "text", r.namespace, i18nText("填写用户名或分组路径，例如 zq 或 zq/tools。"))}${field(i18nText("目标项目名"), "name", "text", r.name)}<p class="muted">保留代码与历史记录。跨空间转移会重新计算访问权限；同空间重命名保留原有状态。</p><label><input type="checkbox" required name="acknowledge">我已了解连接与发布状态的变更</label><button class="btn" type="submit">转移项目</button></form></details>` : ""}<div class="panel"><form class="form" id="repo-settings"><h2>项目设置</h2>${textarea(i18nText("项目描述"), "description", r.description)}${field(i18nText("默认分支"), "default_branch", "text", r.default_branch)}<div class="field"><label for="visibility">可见性</label><select name="visibility" id="visibility"><option value="private" ${r.visibility === "private" ? "selected" : ""}>私有 · 仅成员可访问</option><option value="public" ${r.visibility === "public" ? "selected" : ""}>公开 · 所有人可读取</option></select></div><button class="btn primary" type="submit">保存设置</button></form></div><div class="panel"><div class="panelhead"><strong>审计记录</strong><span class="muted">最近 100 条</span></div>${events.map((e) => `<div class="token-row"><div><strong>${esc(e.action)}</strong><p class="muted">${esc(e.actor || "system")} · ${esc(e.detail)}</p></div><span class="muted">${date(e.created_at)}</span></div>`).join("")}</div></div>`,
+    i18nHTML`<div class="stack">${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="project-lifecycle"><h2>${r.archived_at ? i18nText("恢复项目") : i18nText("归档项目")}</h2><p class="muted">归档后可继续 clone、下载和读取历史，但停止写入。</p><button type="submit" class="btn">${r.archived_at ? i18nText("取消归档") : i18nText("归档为只读")}</button></form></div>` : ""}${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">重命名项目</summary><form class="form" id="project-transfer">${field(i18nText("目标项目名"), "name", "text", r.name)}<button class="btn" type="submit">重命名</button></form></details>` : ""}<div class="panel"><form class="form" id="repo-settings"><h2>项目设置</h2>${textarea(i18nText("项目描述"), "description", r.description)}${field(i18nText("默认分支"), "default_branch", "text", r.default_branch)}<div class="field"><label for="visibility">可见性</label><select name="visibility" id="visibility"><option value="private" ${r.visibility === "private" ? "selected" : ""}>私有 · 仅成员可访问</option><option value="public" ${r.visibility === "public" ? "selected" : ""}>公开 · 所有人可读取</option></select></div><button class="btn primary" type="submit">保存设置</button></form></div><div class="panel"><div class="panelhead"><strong>审计记录</strong><span class="muted">最近 100 条</span></div>${events.map((e) => `<div class="token-row"><div><strong>${esc(e.action)}</strong><p class="muted">${esc(e.actor || "system")} · ${esc(e.detail)}</p></div><span class="muted">${date(e.created_at)}</span></div>`).join("")}</div></div>`,
   );
   bindForm("#project-transfer", async (data) => {
     const result = await api(ap + "/transfer", {
       method: "POST",
       body: {
-        namespace: data.namespace,
         name: data.name,
         revision: r.lifecycle_revision,
       },
     });
-    notice(
-      data.namespace.toLowerCase() === r.namespace.toLowerCase()
-        ? i18nText("项目已重命名")
-        : i18nText("项目已转移；请在目标空间重新配置连接与发布"),
-    );
+    notice(i18nText("项目已重命名"));
     go(`/${result.namespace}/${encodeURIComponent(result.name)}/settings`);
   });
   bindForm("#project-lifecycle", async () => {

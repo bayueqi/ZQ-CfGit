@@ -2,7 +2,7 @@ import {
   text as i18nText,
   html as i18nHTML,
   datetime as i18nTime,
-} from "./i18n.js?v=421b50bfc6caff1b";
+} from "./i18n.js?v=01bf2dfa21d8f5c0";
 function bindActions(h, fn) {
   document.querySelectorAll("[data-session]").forEach(
     (b) =>

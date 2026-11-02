@@ -17,7 +17,7 @@ import { collectIncoming } from "./git/incoming-area";
 import { gitStage, reportGitFailure } from "./git/diagnostics";
 import { GitObjectIndex } from "./git/object-index";
 import { checkProjectVersion, withProjectTransition } from "./project-version";
-import { transferProject } from "./project-transfer";
+import { renameProject } from "./project-transfer";
 import {
   assertRepositoryWritable,
   assertProjectRevision,
@@ -38,7 +38,7 @@ import {
   putRefPublication,
 } from "./git/receipts";
 import type { Env } from "./types";
-import { boundedBody, fail, branch, slug, repoName } from "./security";
+import { boundedBody, fail, branch, repoName } from "./security";
 import { ObjectStore, Refs, text } from "./git/objects";
 import { namespaceRepositories } from "./git/namespaces";
 import { normalizePolicies } from "./delegation";
@@ -282,21 +282,18 @@ export class Repository extends DurableObject<Env> {
         .object({
           actor_id: z.string(),
           archived: z.boolean().optional(),
-          namespace: slug.optional(),
           name: repoName.optional(),
           revision: z.number().int().min(0),
         })
         .parse(JSON.parse(text(await boundedBody(request, 4096))));
       if (url.pathname === "/internal/transfer") {
-        if (!body.namespace || !body.name)
-          fail(400, "Destination namespace and name required");
+        if (!body.name) fail(400, "Destination name required");
         return Response.json(
           await withProjectTransition(this.env, this.ctx.storage, id, () =>
-            transferProject(
+            renameProject(
               this.env,
               metadata,
               body.actor_id,
-              body.namespace!,
               body.name!,
               body.revision,
             ),
