@@ -370,7 +370,7 @@ app.use("*", async (c, next) => {
     c.get("scope") === "read" &&
     !(
       c.req.method === "POST" &&
-      /^\/api\/repos\/[^/]+\/[^/]+\/(grep|archive)$/.test(c.req.path)
+      /^\/api\/repos\/[^/]+\/[^/]+\/archive$/.test(c.req.path)
     )
   )
     fail(403, "Read-only access token");
@@ -869,7 +869,6 @@ for (const operation of [
   "tree",
   "blob",
   "commits",
-  "compare",
   "search",
 ])
   app.get(`/api/repos/:namespace/:repo/${operation}`, async (c) => {

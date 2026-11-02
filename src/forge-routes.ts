@@ -20,27 +20,14 @@ interface Helpers {
     detail?: string,
   ) => Promise<void>;
 }
-const author = z.object({
-  name: z.string().trim().min(1).max(200),
-  email: z.string().trim().min(1).max(254),
-});
 export function registerForgeRoutes(app: Hono<App>, h: Helpers) {
   for (const [route, path] of Object.entries({
     browse: "/browse",
     "tree-updates": "/tree-updates",
     file: "/file",
-    files: "/files",
-    "files/metadata": "/files/metadata",
-    branch: "/branch",
-    "branches/diff": "/branches/diff",
     commit: "/commit-detail",
     diff: "/diff",
     tags: "/tags",
-    tag: "/tag",
-    notes: "/notes",
-    "notes/refs": "/notes/refs",
-    blame: "/blame",
-    "merge/preview": "/merge/preview",
   })) {
     const read = async (c: Context<App>) => {
       const repo = await h.access(c),
@@ -152,71 +139,7 @@ export function registerForgeRoutes(app: Hono<App>, h: Helpers) {
     if (response.ok) await h.audit(c, "git.tag.delete", repo.id);
     return response;
   });
-  const note = z.object({
-    sha,
-    notes_ref: z.string().max(200).optional(),
-    note: z
-      .string()
-      .max(1024 * 1024)
-      .optional(),
-    operation: z.enum(["create", "append"]).optional(),
-    expected_ref_sha: sha.nullable().optional(),
-    ephemeral: z.boolean().optional(),
-    author: author.optional(),
-  });
-  app.post("/api/repos/:namespace/:repo/notes", (c) =>
-    post(c, "/notes/write", "write", note),
-  );
-  app.delete("/api/repos/:namespace/:repo/notes", (c) =>
-    post(c, "/notes/write", "write", note, "delete"),
-  );
-  app.post("/api/repos/:namespace/:repo/merge", (c) =>
-    post(
-      c,
-      "/merge-advanced",
-      "write",
-      z.object({
-        source_ref: z.string().optional(),
-        source_branch: z.string().optional(),
-        target_branch: branch,
-        source_is_ephemeral: z.boolean().optional(),
-        target_is_ephemeral: z.boolean().optional(),
-        expected_target_sha: sha.optional(),
-        strategy: z
-          .enum(["merge", "ff_only", "ff_prefer"])
-          .default("ff_prefer"),
-        squash: z.boolean().optional(),
-        allow_unrelated_histories: z.boolean().optional(),
-        commit_message: z.string().max(10000).default("Merge branches"),
-        author: author.optional(),
-        committer: author.optional(),
-      }),
-    ),
-  );
-  app.post("/api/repos/:namespace/:repo/grep", (c) => post(c, "/grep", "read"));
   app.post("/api/repos/:namespace/:repo/archive", (c) =>
     post(c, "/archive", "read"),
   );
-  app.post("/api/repos/:namespace/:repo/commit-files", (c) =>
-    post(c, "/commit-files", "write"),
-  );
-  for (const route of [
-    "commit-pack",
-    "diff-commit",
-    "restore-commit",
-    "reset-commits",
-  ])
-    app.post("/api/repos/:namespace/:repo/" + route, async (c) => {
-      const repo = await h.access(c, "write");
-      if (!c.req.header("content-type")?.startsWith("application/x-ndjson"))
-        fail(400, "Content-Type must be application/x-ndjson");
-      const response = await h.engine(c, repo, "/" + route, {
-        method: "POST",
-        headers: { "content-type": "application/x-ndjson" },
-        body: c.req.raw.body,
-        mutation: true,
-      });
-      if (response.ok) await h.audit(c, "git." + route, repo.id);
-      return response;
-    });
 }

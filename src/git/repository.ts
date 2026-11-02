@@ -188,57 +188,6 @@ export class GitRepository {
     }
     return { ref: oid, matches, truncated: false };
   }
-  async compare(source: string, target: string) {
-    const a = await this.files(target),
-      b = await this.files(source);
-    let diff = "";
-    for (const path of [
-      ...new Set([...a.files.keys(), ...b.files.keys()]),
-    ].sort()) {
-      const old = a.files.get(path),
-        next = b.files.get(path);
-      if (old?.sha === next?.sha && old?.mode === next?.mode) continue;
-      const before =
-          old && old.type === "blob"
-            ? (await this.store.get(old.sha)).data
-            : bytes(old?.sha || ""),
-        after =
-          next && next.type === "blob"
-            ? (await this.store.get(next.sha)).data
-            : bytes(next?.sha || "");
-      const quote = (p: string) => JSON.stringify(p);
-      diff += `diff --git ${quote("a/" + path)} ${quote("b/" + path)}\n`;
-      if (!old) diff += `new file mode ${next!.mode}\n`;
-      else if (!next) diff += `deleted file mode ${old.mode}\n`;
-      else if (old.mode !== next.mode)
-        diff += `old mode ${old.mode}\nnew mode ${next.mode}\n`;
-      diff += `index ${old?.sha.slice(0, 7) || "0000000"}..${next?.sha.slice(0, 7) || "0000000"}\n`;
-      if (before.includes(0) || after.includes(0)) {
-        diff += "Binary files differ\n";
-        continue;
-      }
-      const x = text(before),
-        y = text(after),
-        left = x ? x.split("\n") : [],
-        right = y ? y.split("\n") : [];
-      if (x.endsWith("\n")) left.pop();
-      if (y.endsWith("\n")) right.pop();
-      diff += `--- ${old ? quote("a/" + path) : "/dev/null"}\n+++ ${next ? quote("b/" + path) : "/dev/null"}\n@@ -${left.length ? 1 : 0},${left.length} +${right.length ? 1 : 0},${right.length} @@\n`;
-      for (let i = 0; i < left.length; i++) {
-        diff += "-" + left[i] + "\n";
-        if (i === left.length - 1 && !x.endsWith("\n"))
-          diff += "\\ No newline at end of file\n";
-      }
-      for (let i = 0; i < right.length; i++) {
-        diff += "+" + right[i] + "\n";
-        if (i === right.length - 1 && !y.endsWith("\n"))
-          diff += "\\ No newline at end of file\n";
-      }
-      if (bytes(diff).length > 2 * 1024 * 1024)
-        fail(413, "Diff exceeds 2 MiB; use git diff locally");
-    }
-    return { source_sha: b.oid, target_sha: a.oid, diff };
-  }
   private async editTree(
     tree: string | undefined,
     parts: string[],
@@ -327,24 +276,6 @@ export class GitRepository {
     );
     await this.publish({ ...this.refs, [ref]: c.oid });
     return { sha: c.oid, branch: b.branch };
-  }
-  async merge(b: {
-    source: string;
-    target: string;
-    source_sha: string;
-    target_sha: string;
-  }) {
-    this.branch(b.source);
-    this.branch(b.target);
-    const source = this.refs["refs/heads/" + b.source],
-      target = this.refs["refs/heads/" + b.target];
-    if (source === b.source_sha && source === target) return { sha: source };
-    if (source !== b.source_sha || target !== b.target_sha)
-      fail(409, "Branch moved since review; create a fresh merge request");
-    if (!(await this.store.ancestor(target, source)))
-      fail(409, "Merge is not fast-forward");
-    await this.publish({ ...this.refs, ["refs/heads/" + b.target]: source });
-    return { sha: source };
   }
   async updates(commands: { old: string; next: string; ref: string }[]) {
     const next = { ...this.refs },

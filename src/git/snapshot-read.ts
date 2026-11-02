@@ -2,21 +2,17 @@ import { HTTPException } from "hono/http-exception";
 import { ObjectStore, type GitObject } from "./objects";
 import type { ObjectCache } from "./object-cache";
 import type { ForgeRepository } from "./forge";
-import { fail } from "../security";
 import { streamResponse } from "./pack-stream";
 import type { BrowseCache } from "./browse-cache";
 
 const paths = new Set([
   "/browse",
   "/branches",
-  "/branch",
   "/tree",
   "/blob",
-  "/resolve",
   "/commits",
   "/commit-detail",
   "/tags",
-  "/tag",
   "/file",
 ]);
 function readRoute(request: Request) {
@@ -137,8 +133,6 @@ export async function repositoryRead(
     file = q.path || "",
     page = { limit: q.limit, cursor: q.cursor };
   switch (path) {
-    case "/resolve":
-      return Response.json({ sha: await repo.resolve(ref) });
     case "/file":
       return repo.rawFile(request, ref, file);
     case "/commit-detail":
@@ -162,19 +156,6 @@ export async function repositoryRead(
       );
     case "/tags":
       return Response.json(await repo.listTags(page));
-    case "/tag": {
-      const tag = (await repo.listTags({ limit: 1000 })).tags.find(
-        (t) => t.name === (q.name || q.tag),
-      );
-      if (!tag) fail(404, "Tag not found");
-      return Response.json(tag);
-    }
-    case "/branch": {
-      const name = q.branch || q.name || defaultBranch,
-        sha = repo.refs["refs/heads/" + name];
-      if (!sha) fail(404, "Branch not found");
-      return Response.json({ name, sha });
-    }
     case "/browse": {
       const started = performance.now();
       const timing = (state: string) => ({

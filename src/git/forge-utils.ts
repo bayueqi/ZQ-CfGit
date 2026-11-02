@@ -49,8 +49,6 @@ export function paginate<T>(
       : null;
   return { items, has_more, next_cursor };
 }
-export const lineTokens = (value: string) =>
-  value.match(/[^\n]*\n|[^\n]+$/g) || [];
 export function matchesGlob(path: string, pattern: string) {
   if (pattern.length > 300) fail(400, "Glob too long");
   let source = "^";

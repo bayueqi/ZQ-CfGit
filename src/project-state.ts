@@ -7,7 +7,7 @@ export function archivedApiWrite(method: string, operation: string) {
     return false;
   if (operation === "" && method === "DELETE") return false;
   if (/^members(?:\/|$)/.test(operation)) return false;
-  if (method === "POST" && ["grep", "archive"].includes(operation)) return false;
+  if (method === "POST" && operation === "archive") return false;
   return true;
 }
 /** Executed after entering the repository DO queue, before any mutation. */
@@ -28,7 +28,7 @@ export function assertRepositoryWritable(repo: Repo | null, request: Request) {
     return;
   if (
     request.method === "POST" &&
-    ["/grep", "/archive", "/git/git-upload-pack"].includes(path)
+    ["/archive", "/git/git-upload-pack"].includes(path)
   )
     return;
   fail(409, "Repository archived; an owner must unarchive it before writing");

@@ -42,9 +42,6 @@ import { boundedBody, fail, branch, repoName } from "./security";
 import { ObjectStore, Refs, text } from "./git/objects";
 import { namespaceRepositories } from "./git/namespaces";
 import { normalizePolicies } from "./delegation";
-import { parseCommitStream } from "./git/commit-stream";
-import { applyGitPatch } from "./git/patch";
-import { paginate } from "./git/forge-utils";
 import { advertise, upload } from "./git/protocol";
 import { importSnapshot } from "./git/legacy";
 /** The per-repository DO serializes requests; immutable R2 objects precede atomic ref publication. */
@@ -385,8 +382,7 @@ export class Repository extends DurableObject<Env> {
       path = url.pathname;
     const life = await lifecycle(request, repo, this.env, this.ctx.storage);
     if (life) return life;
-    const q = Object.fromEntries(url.searchParams),
-      page = { limit: q.limit, cursor: q.cursor };
+    const q = Object.fromEntries(url.searchParams);
     if (request.method === "GET" && path === "/tree-updates")
       return Response.json(
         await updatesAt(
@@ -405,103 +401,13 @@ export class Repository extends DurableObject<Env> {
     if (sharedRead) return sharedRead;
     if (request.method === "GET") {
       switch (path) {
-        case "/files":
-        case "/files/metadata":
-          return Response.json(
-            await repo.listFiles({
-              ...page,
-              ref: q.ref,
-              path: q.path,
-              recursive: q.recursive !== "false",
-              metadata: path.endsWith("metadata"),
-            }),
-          );
         case "/diff":
           return Response.json(
             await repo.diff(q.sha || q.ref || "HEAD", q.base, {
               paths: url.searchParams.getAll("path"),
             }),
           );
-        case "/branches/diff":
-          return Response.json(
-            await repo.diffBranches(
-              q.branch || q.source || "HEAD",
-              q.base || q.target || defaultBranch,
-              url.searchParams.getAll("path"),
-            ),
-          );
-        case "/notes":
-          return Response.json(
-            await repo.getNote(q.sha || "", q.notes_ref || q.ref),
-          );
-        case "/notes/refs": {
-          const list = Object.entries(repo.refs)
-              .filter(([ref]) => ref.startsWith(q.prefix || "refs/notes/"))
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([ref, sha]) => ({ ref, sha })),
-            p = paginate(list, page, JSON.stringify(list));
-          return Response.json({
-            refs: p.items,
-            has_more: p.has_more,
-            next_cursor: p.next_cursor,
-          });
-        }
-        case "/blame":
-          return Response.json(
-            await repo.blame({
-              ref: q.ref,
-              path: q.path || "",
-              range: [
-                ...url.searchParams.getAll("range"),
-                ...url.searchParams.getAll("ranges"),
-              ],
-              detect_moves: q.detect_moves !== "false",
-            }),
-          );
-        case "/merge/preview": {
-          const p = await select(
-            q.target_is_ephemeral === "true" || ephemeral,
-          ).previewMerge({
-            source_ref: q.source_ref || q.source_branch,
-            target_branch: q.target_branch,
-            source_is_ephemeral: q.source_is_ephemeral === "true",
-            include_content: q.include_content === "true",
-            allow_unrelated_histories: q.allow_unrelated_histories === "true",
-          });
-          const { merged, ...result } = p;
-          return Response.json(result);
-        }
       }
-    }
-    if (
-      request.method === "POST" &&
-      [
-        "/commit-pack",
-        "/diff-commit",
-        "/restore-commit",
-        "/reset-commits",
-      ].includes(path)
-    ) {
-      const kind =
-          path === "/commit-pack"
-            ? "files"
-            : path === "/diff-commit"
-              ? "diff"
-              : "restore",
-        parsed = await parseCommitStream(request, store, kind),
-        target = select(parsed.metadata.ephemeral === true || ephemeral);
-      if (kind === "files")
-        return Response.json(await target.commitFiles(parsed.metadata), {
-          status: 201,
-        });
-      if (kind === "diff")
-        return Response.json(
-          await applyGitPatch(target, parsed.metadata, parsed.diff!),
-          { status: 201 },
-        );
-      return Response.json(await target.restore(parsed.metadata), {
-        status: 201,
-      });
     }
     if (
       ["POST", "DELETE"].includes(request.method) &&
@@ -510,11 +416,7 @@ export class Repository extends DurableObject<Env> {
         "/branches/delete",
         "/tags/create",
         "/tags/delete",
-        "/notes/write",
-        "/grep",
         "/archive",
-        "/merge-advanced",
-        "/commit-files",
       ].includes(path)
     ) {
       let body;
@@ -548,18 +450,8 @@ export class Repository extends DurableObject<Env> {
           );
         case "/tags/delete":
           return Response.json(await target.deleteTag(body.name));
-        case "/notes/write":
-          return Response.json(await target.writeNote(body), {
-            status: body.operation === "delete" ? 200 : 201,
-          });
-        case "/grep":
-          return Response.json(await target.grep(body));
         case "/archive":
           return target.archive(body);
-        case "/merge-advanced":
-          return Response.json(await target.mergeBranches(body));
-        case "/commit-files":
-          return Response.json(await target.commitFiles(body), { status: 201 });
       }
     }
     if (request.method === "POST" && path === "/import-files") {
@@ -619,16 +511,9 @@ export class Repository extends DurableObject<Env> {
           return Response.json(
             await repo.search(ref, url.searchParams.get("q") || ""),
           );
-        case "/compare":
-          return Response.json(
-            await repo.compare(
-              url.searchParams.get("source") || "",
-              url.searchParams.get("target") || "",
-            ),
-          );
       }
     }
-    if (request.method === "POST" && ["/commit", "/merge"].includes(path)) {
+    if (request.method === "POST" && path === "/commit") {
       let body;
       try {
         body = JSON.parse(text(await boundedBody(request, 2 * 1024 * 1024)));
@@ -636,9 +521,7 @@ export class Repository extends DurableObject<Env> {
         if (e instanceof HTTPException) throw e;
         fail(400, "Invalid JSON");
       }
-      if (path === "/commit")
-        return Response.json(await repo.commit(body), { status: 201 });
-      return Response.json(await repo.merge(body));
+      return Response.json(await repo.commit(body), { status: 201 });
     }
     fail(404, "Git endpoint not found");
   }
