@@ -6,10 +6,10 @@ import {
   errorText,
   relativeTime,
   state as i18nState,
-} from "./i18n.js?v=3c48eba548be8390";
-const account = () => import("./account.js?v=84ca19f7a409fbf0");
-const collaboration = () => import("./collaboration.js?v=52dac5ee5694333a");
-import { forgePage } from "./forge.js?v=cf5a23606622e61f";
+} from "./i18n.js?v=d3f79f520bea2922";
+const account = () => import("./account.js?v=8373b7dd1b692504");
+const collaboration = () => import("./collaboration.js?v=9fa93e782f62dfd6");
+import { forgePage } from "./forge.js?v=9542f8b39d4da742";
 const root = document.querySelector("#app");
 const esc = (x) =>
   String(x ?? "").replace(
@@ -27,8 +27,6 @@ const icons = {
   folder: "M3 5h6l2 3h10v12H3z",
   file: "M5 3h9l5 5v13H5z M14 3v6h5",
   branch: "M6 3v12a4 4 0 0 0 8 0V9 M3 3h6 M11 6h6v3h-6z",
-  users:
-    "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M17 4a4 4 0 0 1 0 7 M22 21v-2a4 4 0 0 0-3-4",
   search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16 M21 21l-4.3-4.3",
   link: "M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1 M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1",
   shield: "M12 3l8 3v6c0 5-3.4 8.3-8 9.5C7.4 20.3 4 17 4 12V6z M9 12l2 2 4-4",
@@ -139,7 +137,7 @@ async function applyMarkdown(context = {}) {
     (el) => !el.dataset.rendered,
   );
   if (!targets.length) return;
-  const { renderMarkdown } = await import("./markdown.js?v=ff7b039d4ff57505");
+  const { renderMarkdown } = await import("./markdown.js?v=5c1e11be8f51b2f5");
   for (const el of targets) {
     if (!el.isConnected) continue;
     const raw = el.textContent;
@@ -277,7 +275,7 @@ function layout(content, crumb = i18nText("项目"), active = "repos") {
   document.title = heading + " · ZQ-CfGit";
   const navItem = (path, ic, label, key) =>
     link(path, icon(ic) + label, `navlink${active === key ? " active" : ""}`);
-  root.innerHTML = i18nHTML`<div class="layout"><aside class="sidebar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="workspace"><span class="avatar">${esc(user?.username[0].toUpperCase() || "Z")}</span><div>${esc(user?.username || "ZQ-CfGit")}</div></div><div class="eyebrow">项目</div><nav>${navItem("/", "repo", i18nText("项目"), "repos")}${user ? navItem("/settings/tokens", "key", i18nText("访问令牌"), "tokens") : ""}${user ? navItem("/settings/account", "shield", i18nText("账户安全"), "account") + navItem("/profile", "users", i18nText("我的动态"), "profile") : ""}</nav><footer>ZQ-CfGit</footer></aside><main class="main"><header class="topbar"><div class="breadcrumb"><span>${esc(heading)}</span></div><div class="right"><span class="pill">自托管</span>${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main></div>`;
+  root.innerHTML = i18nHTML`<div class="layout"><aside class="sidebar">${link("/", '<img src="/logo.png" alt="">ZQ-CfGit', "brand")}<div class="workspace"><span class="avatar">${esc(user?.username[0].toUpperCase() || "Z")}</span><div>${esc(user?.username || "ZQ-CfGit")}</div></div><div class="eyebrow">项目</div><nav>${navItem("/", "repo", i18nText("项目"), "repos")}${user ? navItem("/settings/tokens", "key", i18nText("访问令牌"), "tokens") : ""}${user ? navItem("/settings/account", "shield", i18nText("账户安全"), "account") : ""}</nav><footer>ZQ-CfGit</footer></aside><main class="main"><header class="topbar"><div class="breadcrumb"><span>${esc(heading)}</span></div><div class="right"><span class="pill">自托管</span>${user ? i18nHTML`<span class="avatar" title="${esc(user.username)}">${esc(user.username[0].toUpperCase())}</span><button class="text" id="logout">退出</button>` : link("/login", i18nText("登录"), "btn small")}</div></header><div class="content">${content}</div></main></div>`;
   document.querySelector("#logout")?.addEventListener("click", async () => {
     await api("/logout", { method: "POST" });
     user = null;
@@ -465,7 +463,7 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
   if (notebook) {
     try {
       const { mountNotebook } =
-        await import("./notebook.js?v=3a7f73b4c9c9ef4b");
+        await import("./notebook.js?v=4a4878c8b4ee45a2");
       if (version !== routeVersion || !notebook.isConnected) return;
       mountNotebook(notebook, data.content, { base, ref: data.ref, path: p });
     } catch {
@@ -640,7 +638,7 @@ async function issuesPage(r, base, ap, sub, version, helpers) {
     });
     return i;
   }
-  return (await import("./issues.js?v=1b3a8a841c45c547")).issuesPage(
+  return (await import("./issues.js?v=38f2b8081982eb97")).issuesPage(
     r,
     base,
     ap,
@@ -766,25 +764,20 @@ async function render() {
     code: i18nText("代码"),
     new: i18nText("新建项目"),
     login: i18nText("登录"),
-    profile: i18nText("我的动态"),
     account: i18nText("账户安全"),
   };
   const segments = path.split("/").filter(Boolean),
     segment = segments.at(-1),
     repoPath =
       segments.length > 1 &&
-      !["settings", "login", "new", "profile"].includes(segments[0]),
+      !["settings", "login", "new"].includes(segments[0]),
     title = repoPath
       ? `${segments[0]} / ${segments[1]}`
       : titles[segment] || i18nText("项目");
   layout(
     loadingContent(title),
     title,
-    path === "/profile"
-      ? "profile"
-      : path.startsWith("/settings/")
-        ? segment
-        : "repos",
+    path.startsWith("/settings/") ? segment : "repos",
   );
   primeRoute();
   try {
@@ -815,17 +808,6 @@ async function render() {
     if (path === "/settings/account") {
       if (!user) return go("/login");
       await (await account()).securityPage(helpers);
-      return;
-    }
-    if (path === "/profile") {
-      await (
-        await account()
-      ).profilePage(
-        helpers,
-        new URLSearchParams(location.search).get("user") ||
-          user?.username ||
-          "",
-      );
       return;
     }
     if (path === "/settings/tokens") {
@@ -876,8 +858,6 @@ async function render() {
     else throw Error(i18nText("页面不存在"));
     if (version === routeVersion)
       applyMarkdown({ base, ref: r.default_branch }).catch(() => {});
-    if (version === routeVersion)
-      (await collaboration()).social(r, ap, helpers).catch(() => {});
   } catch (e) {
     if (version !== routeVersion) return;
     layout(

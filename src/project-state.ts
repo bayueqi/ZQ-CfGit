@@ -1,9 +1,9 @@
 import type { Env, Repo } from "./types";
 import { fail } from "./security";
-/** Read-only POSTs do not mutate the source project. Personal stars/watches and access revocation remain available. */
+/** Read-only POSTs do not mutate the source project. Access revocation remains available. */
 export function archivedApiWrite(method: string, operation: string) {
   if (["GET", "HEAD", "OPTIONS"].includes(method)) return false;
-  if (["lifecycle", "transfer", "star", "watch"].includes(operation))
+  if (["lifecycle", "transfer"].includes(operation))
     return false;
   if (operation === "" && method === "DELETE") return false;
   if (/^members(?:\/|$)/.test(operation)) return false;

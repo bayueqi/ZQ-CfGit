@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Hono, Context } from "hono";
-import type { App, Env, User } from "./types";
+import type { App, Env } from "./types";
 import { fail, verifyPassword } from "./security";
 import { deleteCookie } from "hono/cookie";
 export async function securityLimit(env: Env, id: string) {
@@ -64,38 +64,5 @@ export function registerAccount(app: Hono<App>) {
       deleteCookie(c, "zq-cfgit_session", { path: "/" });
     await record(c, "account.session.revoke");
     return c.json({ ok: true });
-  });
-  app.get("/api/profiles/:username", async (c) => {
-    if (c.get("delegation")) fail(403, "Git delegation cannot read profiles");
-    const u = await c.env.DB.prepare(
-      "SELECT id,username,created_at FROM users WHERE username=? AND disabled=0",
-    )
-      .bind(c.req.param("username"))
-      .first<User & Record<string, unknown>>();
-    if (!u) fail(404, "User not found");
-    const viewer = c.get("user")?.id || "",
-      before = Number(c.req.query("before") || Number.MAX_SAFE_INTEGER);
-    if (!Number.isSafeInteger(before) || before < 1)
-      fail(400, "Invalid activity cursor");
-    const allowed =
-      "(r.visibility='public' OR (r.workspace_id IS NULL AND r.owner_id=?) OR EXISTS(SELECT 1 FROM members m WHERE m.repo_id=r.id AND m.user_id=?) OR EXISTS(SELECT 1 FROM workspace_members w WHERE w.workspace_id=r.workspace_id AND w.user_id=?))";
-    const [repos, activity] = await Promise.all([
-      c.env.DB.prepare(
-        `SELECT r.id,r.namespace,r.name,r.description,r.visibility FROM repositories r WHERE r.owner_id=? AND r.workspace_id IS NULL AND r.deleted_at IS NULL AND ${allowed} ORDER BY r.created_at DESC LIMIT 50`,
-      )
-        .bind(u.id, viewer, viewer, viewer)
-        .all(),
-      c.env.DB.prepare(
-        `SELECT a.id,a.action,a.detail,a.created_at,r.namespace,r.name FROM audit a JOIN repositories r ON r.id=a.repo_id WHERE a.actor_id=? AND a.id<? AND r.deleted_at IS NULL AND ${allowed} ORDER BY a.id DESC LIMIT 50`,
-      )
-        .bind(u.id, before, viewer, viewer, viewer)
-        .all<any>(),
-    ]);
-    return c.json({
-      profile: u,
-      repositories: repos.results,
-      activity: activity.results,
-      next: activity.results.length === 50 ? activity.results.at(-1).id : null,
-    });
   });
 }

@@ -4,7 +4,7 @@ import {
   getLocale,
   state as i18nState,
   datetime as i18nTime,
-} from "./i18n.js?v=3c48eba548be8390";
+} from "./i18n.js?v=d3f79f520bea2922";
 const button = (text, action, id = "") =>
   `<button type="button" class="btn small" data-collab="${action}" data-id="${id}">${text}</button>`;
 function actions(h, fn) {
@@ -215,32 +215,6 @@ export async function issuePlanning(r, ap, h, issue) {
     });
     render();
   });
-}
-export async function social(r, ap, h) {
-  if (!h.user) return;
-  const d = await h.api(ap + "/social");
-  if (!h.current()) return;
-  const el = document.createElement("div");
-  el.className = "toolbar";
-  el.innerHTML = button(
-    (d.starred ? i18nText("★ 已收藏") : i18nText("☆ 收藏")) + " " + d.stars,
-    "star",
-  );
-  document.querySelector(".content > .titlebar")?.append(el);
-  el.querySelectorAll("[data-collab]").forEach(
-    (b) =>
-      (b.onclick = async () => {
-        try {
-          const on = d.starred;
-          await h.api(ap + "/star", {
-            method: on ? "DELETE" : "PUT",
-          });
-          h.render();
-        } catch (e) {
-          h.notice(e.message);
-        }
-      }),
-  );
 }
 export async function mergesPage(r, base, ap, h) {
   const { api, repoLayout, esc, field, textarea, bindForm, go } = h;

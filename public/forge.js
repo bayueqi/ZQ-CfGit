@@ -1,7 +1,7 @@
 import {
   text as i18nText,
   html as i18nHTML,
-} from "./i18n.js?v=3c48eba548be8390";
+} from "./i18n.js?v=d3f79f520bea2922";
 export async function forgePage(r, base, ap, h) {
   const { api, repoLayout, esc, field, textarea, bindForm, notice, go } = h;
   const ephemeral =

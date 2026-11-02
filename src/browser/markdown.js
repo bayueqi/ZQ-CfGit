@@ -1,10 +1,13 @@
 import MarkdownIt from "markdown-it";
+import DOMPurify from "dompurify";
 const md = new MarkdownIt({
-  html: false,
+  html: true,
   linkify: true,
   typographer: false,
   maxNesting: 40,
 });
+const sanitize = (html) =>
+  DOMPurify.sanitize(html, { ADD_ATTR: ["target"], FORBID_TAGS: ["style"] });
 const defaultValidate = md.validateLink.bind(md);
 md.validateLink = (url) => {
   const clean = url.replace(/[\x00-\x20\x7f]/g, "");
@@ -127,5 +130,5 @@ md.core.ruler.after("inline", "tasks", (state) => {
 export function renderMarkdown(source, env = {}) {
   if (typeof source !== "string") return "";
   if (source.length > 200000) return "<pre>" + escape(source) + "</pre>";
-  return md.render(source, env);
+  return sanitize(md.render(source, env));
 }

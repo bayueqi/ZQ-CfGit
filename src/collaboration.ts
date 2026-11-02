@@ -535,35 +535,4 @@ function registerCommunity(
     await h.audit(c, "wiki.update", r.id, page);
     return c.json(result);
   });
-  app.put(base + "/star", async (c) => {
-    const r = await access(c),
-      u = identity(c);
-    await c.env.DB.prepare(
-      "INSERT OR IGNORE INTO repository_stars VALUES(?,?)",
-    )
-      .bind(r.id, u.id)
-      .run();
-    return c.json({ ok: true });
-  });
-  app.delete(base + "/star", async (c) => {
-    const r = await access(c),
-      u = identity(c);
-    await c.env.DB.prepare(
-      "DELETE FROM repository_stars WHERE repo_id=? AND user_id=?",
-    )
-      .bind(r.id, u.id)
-      .run();
-    return c.json({ ok: true });
-  });
-  app.get(base + "/social", async (c) => {
-    const r = await access(c),
-      u = c.get("user");
-    return c.json(
-      await c.env.DB.prepare(
-        "SELECT (SELECT count(*) FROM repository_stars WHERE repo_id=?) AS stars,EXISTS(SELECT 1 FROM repository_stars WHERE repo_id=? AND user_id=?) AS starred",
-      )
-        .bind(r.id, r.id, u?.id || "")
-        .first(),
-    );
-  });
 }
