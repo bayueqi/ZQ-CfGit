@@ -4,19 +4,9 @@ import { confirmGitResponse } from "./git/confirmation";
 import { repositoryAt } from "./project-transfer";
 import { projectDatabase } from "./project-db";
 import { archivedApiWrite, archiveError } from "./project-state";
-import {
-  registerIssueWorkflows,
-  createIssue,
-  createIssueComment,
-} from "./issue-workflows";
-import {
-  registerAccount,
-  passwordProof,
-} from "./account";
-import { registerCollaboration } from "./collaboration";
+import { registerAccount, passwordProof } from "./account";
 import { repositoryRole, roleRank } from "./access";
 import { base64, unbase64 } from "./git/signatures";
-import { registerMCP } from "./mcp";
 import { registerForgeRoutes } from "./forge-routes";
 import { verifyDelegation, requireScope } from "./delegation";
 import { Hono, type Context } from "hono";
@@ -41,10 +31,6 @@ const app = new Hono<App>();
 const userInput = z.object({
   username: slug,
   password: z.string().min(12).max(128),
-});
-const issueInput = z.object({
-  title: z.string().trim().min(1).max(240),
-  body: z.string().max(20000).default(""),
 });
 async function input<T>(c: Context<App>, schema: z.ZodType<T>): Promise<T> {
   const b = await boundedBody(c.req.raw, 2 * 1024 * 1024);
@@ -83,7 +69,7 @@ async function repoAccess(
   const delegated = c.get("delegation");
   if (delegated) {
     const operation = c.req.path.split("/").slice(5).join("/");
-    if (/^(members|issues|merges|audit)(\/|$)/.test(operation))
+    if (/^(members|audit)(\/|$)/.test(operation))
       fail(403, "Delegated Git tokens cannot manage collaboration");
     requireScope(
       delegated,
@@ -262,8 +248,6 @@ const staticPaths = new Set([
   "/i18n.js",
   "/app.js",
   "/forge.js",
-  "/collaboration.js",
-  "/issues.js",
   "/account.js",
   "/markdown.js",
   "/notebook.js",
@@ -393,7 +377,6 @@ app.use("*", async (c, next) => {
   await next();
 });
 registerAccount(app);
-registerMCP(app);
 app.get("/api/health", (c) =>
   c.json({ name: "ZQ-CfGit", version: packageInfo.version, status: "ok" }),
 );
@@ -825,8 +808,6 @@ app.get("/api/repo-url/:id", async (c) => {
     ephemeral_url: `${c.env.APP_ORIGIN}/${r.namespace}/${encodeURIComponent(r.name)}+ephemeral.git`,
   });
 });
-registerIssueWorkflows(app, { access: repoAccess });
-registerCollaboration(app, { access: repoAccess, engine: engineJSON, audit });
 app.get("/api/repos/:namespace/:repo/preview", async (c) => {
   const r = await repoAccess(c),
     response = await engine(c, r, "/file" + new URL(c.req.url).search);
@@ -897,45 +878,6 @@ app.post("/api/repos/:namespace/:repo/commit", async (c) => {
   });
   await audit(c, "repo.commit", r.id, result.sha);
   return c.json(result, 201);
-});
-app.post("/api/repos/:namespace/:repo/issues", async (c) => {
-  const r = await repoAccess(c),
-    u = requireUser(c),
-    b = await input(c, issueInput);
-  const result = await createIssue(c.env, r, u, b.title, b.body);
-  await audit(c, "issue.create", r.id, b.title);
-  return c.json(result, 201);
-});
-app.post("/api/repos/:namespace/:repo/issues/:id/comments", async (c) => {
-  const r = await repoAccess(c),
-    u = requireUser(c),
-    b = await input(c, z.object({ body: z.string().trim().min(1).max(20000) }));
-  if (
-    !(await c.env.DB.prepare("SELECT id FROM issues WHERE id=? AND repo_id=?")
-      .bind(c.req.param("id"), r.id)
-      .first())
-  )
-    fail(404, "Issue not found");
-  const comment = await createIssueComment(
-    c.env,
-    r,
-    u,
-    z.coerce.number().int().positive().parse(c.req.param("id")),
-    b.body,
-  );
-  return c.json(comment, 201);
-});
-app.get("/api/repos/:namespace/:repo/merges", async (c) => {
-  const r = await repoAccess(c);
-  return c.json({
-    merges: (
-      await c.env.DB.prepare(
-        "SELECT m.*,u.username AS author FROM merge_requests m JOIN users u ON u.id=m.author_id WHERE repo_id=? ORDER BY m.id DESC LIMIT 100",
-      )
-        .bind(r.id)
-        .all()
-    ).results,
-  });
 });
 app.get("/api/repos/:namespace/:repo/audit", async (c) => {
   const r = await repoAccess(c, "maintain");

@@ -8,8 +8,7 @@ import {
   state as i18nState,
 } from "./i18n.js?v=d3f79f520bea2922";
 const account = () => import("./account.js?v=8373b7dd1b692504");
-const collaboration = () => import("./collaboration.js?v=9fa93e782f62dfd6");
-import { forgePage } from "./forge.js?v=9542f8b39d4da742";
+import { forgePage } from "./forge.js?v=00b21e1eb8b1df70";
 const root = document.querySelector("#app");
 const esc = (x) =>
   String(x ?? "").replace(
@@ -209,34 +208,7 @@ function primeRoute() {
     const ap = "/repos/" + parts[0] + "/" + parts[1];
     reads.push(ap);
     if (!parts[2]) reads.push(browseURL(ap));
-    else if (parts[2] === "issues" && !parts[3]) {
-      const q = new URLSearchParams(location.search);
-      reads.push(ap + "/planning", ap + "/issue-boards");
-      if (q.get("view") === "board")
-        reads.push(
-          ap +
-            "/issue-boards/" +
-            encodeURIComponent(q.get("board") || "default"),
-        );
-      else {
-        q.set("limit", "50");
-        reads.push(ap + "/issues?" + q);
-      }
-    } else if (
-      parts[2] === "issues" &&
-      parts[3] &&
-      new URLSearchParams(location.search).get("comments_after")
-    ) {
-      reads.push(
-        ap +
-          "/issues/" +
-          parts[3] +
-          "?comments_after=" +
-          encodeURIComponent(
-            new URLSearchParams(location.search).get("comments_after"),
-          ),
-      );
-    } else if (["commits", "issues", "merges"].includes(parts[2]))
+    else if (parts[2] === "commits")
       reads.push(ap + "/" + parts[2] + (parts[3] ? "/" + parts[3] : ""));
   }
   // Attach rejection handlers immediately; the page awaits the same in-flight reads.
@@ -373,11 +345,6 @@ function repoLayout(r, tab, content, actions = "") {
       ["commits", i18nText("提交"), "/commits"],
       ["forge", i18nText("Git 工具"), "/forge"],
       ["search", i18nText("搜索"), "/search"],
-      ["issues", i18nText("议题"), "/issues"],
-      ["merges", i18nText("合并请求"), "/merges"],
-      ["planning", i18nText("规划"), "/planning"],
-      ["releases", i18nText("版本"), "/releases"],
-      ["wiki", i18nText("维基"), "/wiki"],
       ...(["owner", "maintainer"].includes(r.role)
         ? [["settings", i18nText("设置"), "/settings"]]
         : []),
@@ -593,78 +560,13 @@ async function commitsPage(r, base, ap, version) {
     i18nHTML`<div class="panel"><div class="panelhead"><strong>最近提交</strong><span class="muted">${esc(r.default_branch)}</span></div>${commits.map((c) => `<div class="repo-row"><span class="avatar">${esc(c.author[0])}</span><div class="repo-info"><strong>${esc(c.message)}</strong><p>${esc(c.author)} · ${date(c.date)}</p></div><code>${c.sha.slice(0, 8)}</code></div>`).join("")}</div>`,
   );
 }
-async function issuesPage(r, base, ap, sub, version, helpers) {
-  if (sub) {
-    const after = new URLSearchParams(location.search).get("comments_after");
-    const i = await api(
-      ap +
-        "/issues/" +
-        sub +
-        (after ? "?comments_after=" + encodeURIComponent(after) : ""),
-    );
-    if (version !== routeVersion) return;
-    repoLayout(
-      r,
-      "issues",
-      `<div class="titlebar"><div><h2>#${i.id} ${esc(i.title)}</h2><span class="pill ${i.state === "open" ? "green" : "purple"}">${i.state === "open" ? i18nText("开放中") : i18nText("已关闭")}</span> <span class="muted">${esc(i.author)} · ${date(i.created_at)}</span></div>${!r.archived_at && user && (user.id === i.author_id || ["owner", "maintainer", "developer"].includes(r.role)) ? '<button class="btn" id="toggle">' + (i.state === "open" ? i18nText("关闭 Issue") : i18nText("重新打开")) + "</button>" : ""}</div>${!r.archived_at && user && (user.id === i.author_id || ["owner", "maintainer", "developer"].includes(r.role)) ? i18nHTML`<details class="panel"><summary class="panelhead">编辑标题与描述</summary><form class="form" id="edit-issue">${field(i18nText("标题"), "title", "text", i.title)}${textarea(i18nText("描述"), "body", i.body)}<button class="btn primary" type="submit">保存</button></form></details>` : ""}<div class="panel"><div class="detail-body markdown" data-markdown>${esc(i.body || i18nText("暂无描述。"))}</div>${i.comments.map((c) => `<div class="comment"><strong>${esc(c.author)}</strong> <span class="muted">${date(c.created_at)}</span><div class="markdown" data-markdown>${esc(c.body)}</div></div>`).join("")}${i.comments_next ? i18nHTML`<a data-link class="btn" href="${base}/issues/${i.id}?comments_after=${i.comments_next}">更多评论 →</a>` : ""}${!r.archived_at && user ? i18nHTML`<form class="form" id="comment">${textarea(i18nText("参与讨论"), "body")}<button class="btn primary" type="submit">发表评论</button></form>` : ""}</div>`,
-    );
-    document.querySelector("#toggle")?.addEventListener("click", async () => {
-      try {
-        await api(ap + "/issues/" + sub, {
-          method: "PATCH",
-          body: {
-            state: i.state === "open" ? "closed" : "open",
-            revision: i.revision,
-          },
-        });
-        render();
-      } catch (e) {
-        notice(e.message);
-      }
-    });
-    bindForm("#edit-issue", async (b) => {
-      await api(ap + "/issues/" + sub, {
-        method: "PATCH",
-        body: { ...b, revision: i.revision },
-      });
-      render();
-    });
-    bindForm("#comment", async (data) => {
-      await api(ap + "/issues/" + sub + "/comments", {
-        method: "POST",
-        body: data,
-      });
-      render();
-    });
-    return i;
-  }
-  return (await import("./issues.js?v=38f2b8081982eb97")).issuesPage(
-    r,
-    base,
-    ap,
-    helpers,
-  );
-}
-async function mergesPage(r, base, ap, sub, version) {
-  return (await collaboration()).mergesPage(r, base, ap, {
-    api,
-    repoLayout,
-    esc,
-    field,
-    textarea,
-    bindForm,
-    go,
-    user,
-    current: () => version === routeVersion,
-  });
-}
 async function settingsPage(r, base, ap, version) {
   const { events } = await api(ap + "/audit");
   if (version !== routeVersion) return;
   repoLayout(
     r,
     "settings",
-    i18nHTML`<div class="stack">${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="project-lifecycle"><h2>${r.archived_at ? i18nText("恢复项目") : i18nText("归档项目")}</h2><p class="muted">归档后可继续 clone、下载和读取历史；停止写入及新流水线，取消正在执行的任务。已发布应用保留最后版本。恢复后，已取消任务需要手动重试。</p><button type="submit" class="btn">${r.archived_at ? i18nText("取消归档") : i18nText("归档为只读")}</button></form></div>` : ""}${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">转移或重命名项目</summary><form class="form" id="project-transfer">${field(i18nText("目标命名空间"), "namespace", "text", r.namespace, i18nText("填写用户名或分组路径，例如 zq 或 zq/tools。"))}${field(i18nText("目标项目名"), "name", "text", r.name)}<p class="muted">保留代码、Issues、MR、Wiki 与历史产物；显式项目成员保留，团队继承权限重新计算。跨空间转移会取消 CI 与同步，撤销 Runner、Git 连接及 Webhook，暂停自动流水线并关闭应用公开访问；目标空间需要重新配置后启用。同空间重命名保留连接、运行与发布状态。</p><label><input type="checkbox" required name="acknowledge">我已了解连接与发布状态的变更</label><button class="btn" type="submit">转移项目</button></form></details>` : ""}<div class="panel"><form class="form" id="repo-settings"><h2>项目设置</h2>${textarea(i18nText("项目描述"), "description", r.description)}${field(i18nText("默认分支"), "default_branch", "text", r.default_branch)}<div class="field"><label for="visibility">可见性</label><select name="visibility" id="visibility"><option value="private" ${r.visibility === "private" ? "selected" : ""}>私有 · 仅成员可访问</option><option value="public" ${r.visibility === "public" ? "selected" : ""}>公开 · 所有人可读取</option></select></div><button class="btn primary" type="submit">保存设置</button></form></div><div class="panel"><div class="panelhead"><strong>审计记录</strong><span class="muted">最近 100 条</span></div>${events.map((e) => `<div class="token-row"><div><strong>${esc(e.action)}</strong><p class="muted">${esc(e.actor || "system")} · ${esc(e.detail)}</p></div><span class="muted">${date(e.created_at)}</span></div>`).join("")}</div></div>`,
+    i18nHTML`<div class="stack">${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="project-lifecycle"><h2>${r.archived_at ? i18nText("恢复项目") : i18nText("归档项目")}</h2><p class="muted">归档后可继续 clone、下载和读取历史，但停止写入。</p><button type="submit" class="btn">${r.archived_at ? i18nText("取消归档") : i18nText("归档为只读")}</button></form></div>` : ""}${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">转移或重命名项目</summary><form class="form" id="project-transfer">${field(i18nText("目标命名空间"), "namespace", "text", r.namespace, i18nText("填写用户名或分组路径，例如 zq 或 zq/tools。"))}${field(i18nText("目标项目名"), "name", "text", r.name)}<p class="muted">保留代码与历史记录。跨空间转移会重新计算访问权限；同空间重命名保留原有状态。</p><label><input type="checkbox" required name="acknowledge">我已了解连接与发布状态的变更</label><button class="btn" type="submit">转移项目</button></form></details>` : ""}<div class="panel"><form class="form" id="repo-settings"><h2>项目设置</h2>${textarea(i18nText("项目描述"), "description", r.description)}${field(i18nText("默认分支"), "default_branch", "text", r.default_branch)}<div class="field"><label for="visibility">可见性</label><select name="visibility" id="visibility"><option value="private" ${r.visibility === "private" ? "selected" : ""}>私有 · 仅成员可访问</option><option value="public" ${r.visibility === "public" ? "selected" : ""}>公开 · 所有人可读取</option></select></div><button class="btn primary" type="submit">保存设置</button></form></div><div class="panel"><div class="panelhead"><strong>审计记录</strong><span class="muted">最近 100 条</span></div>${events.map((e) => `<div class="token-row"><div><strong>${esc(e.action)}</strong><p class="muted">${esc(e.actor || "system")} · ${esc(e.detail)}</p></div><span class="muted">${date(e.created_at)}</span></div>`).join("")}</div></div>`,
   );
   bindForm("#project-transfer", async (data) => {
     const result = await api(ap + "/transfer", {
@@ -757,8 +659,6 @@ async function render() {
     tokens: i18nText("访问令牌"),
     commits: i18nText("提交"),
     forge: i18nText("Git 工具"),
-    issues: i18nText("议题"),
-    merges: i18nText("合并请求"),
     settings: i18nText("设置"),
     search: i18nText("搜索"),
     code: i18nText("代码"),
@@ -841,19 +741,10 @@ async function render() {
       loadingContent(titles[tab] || i18nText("文件")),
     );
     if (!tab) await codePage(r, base, ap, version);
-    else if (["planning", "releases", "wiki"].includes(tab))
-      await (await collaboration()).projectPage(r, base, ap, helpers, tab, sub);
-    else if (tab === "merges" && sub)
-      await (await collaboration()).reviewPage(r, base, ap, helpers, sub);
     else if (tab === "forge") await forgePage(r, base, ap, helpers);
     else if (tab === "search") await searchPage(r, base, ap, version);
     else if (tab === "edit") await editPage(r, base, ap, version);
     else if (tab === "commits") await commitsPage(r, base, ap, version);
-    else if (tab === "issues") {
-      const issue = await issuesPage(r, base, ap, sub, version, helpers);
-      if (sub && issue && version === routeVersion)
-        await (await collaboration()).issuePlanning(r, ap, helpers, issue);
-    } else if (tab === "merges") await mergesPage(r, base, ap, sub, version);
     else if (tab === "settings") await settingsPage(r, base, ap, version);
     else throw Error(i18nText("页面不存在"));
     if (version === routeVersion)

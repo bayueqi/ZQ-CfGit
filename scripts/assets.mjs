@@ -34,9 +34,7 @@ await update("public/notebook.js", notebook);
 const forge = hash(await readFile("public/forge.js"));
 let app = await readFile("public/app.js", "utf8");
 for (const name of [
-  "issues",
   "highlight",
-  "collaboration",
   "account",
   "markdown",
   "notebook",

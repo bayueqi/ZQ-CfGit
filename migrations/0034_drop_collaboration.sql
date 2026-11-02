@@ -1,0 +1,65 @@
+-- Remove collaboration features (issues, merge requests, wiki, releases, planning)
+-- for the personal backup-station scope.
+
+DROP TRIGGER IF EXISTS wiki_insert_history;
+DROP TRIGGER IF EXISTS wiki_update_history;
+DROP TRIGGER IF EXISTS merge_issue_close;
+DROP TRIGGER IF EXISTS issue_created_time;
+DROP TRIGGER IF EXISTS issue_version;
+DROP TRIGGER IF EXISTS issue_label_added;
+DROP TRIGGER IF EXISTS issue_label_removed;
+
+DROP TRIGGER IF EXISTS archived_issues_insert;
+DROP TRIGGER IF EXISTS archived_issues_update;
+DROP TRIGGER IF EXISTS archived_issues_delete;
+DROP TRIGGER IF EXISTS archived_labels_insert;
+DROP TRIGGER IF EXISTS archived_labels_update;
+DROP TRIGGER IF EXISTS archived_labels_delete;
+DROP TRIGGER IF EXISTS archived_milestones_insert;
+DROP TRIGGER IF EXISTS archived_milestones_update;
+DROP TRIGGER IF EXISTS archived_milestones_delete;
+DROP TRIGGER IF EXISTS archived_releases_insert;
+DROP TRIGGER IF EXISTS archived_releases_update;
+DROP TRIGGER IF EXISTS archived_releases_delete;
+DROP TRIGGER IF EXISTS archived_wiki_pages_insert;
+DROP TRIGGER IF EXISTS archived_wiki_pages_update;
+DROP TRIGGER IF EXISTS archived_wiki_pages_delete;
+DROP TRIGGER IF EXISTS archived_wiki_history_insert;
+DROP TRIGGER IF EXISTS archived_wiki_history_update;
+DROP TRIGGER IF EXISTS archived_wiki_history_delete;
+DROP TRIGGER IF EXISTS archived_issue_boards_insert;
+DROP TRIGGER IF EXISTS archived_issue_boards_update;
+DROP TRIGGER IF EXISTS archived_issue_boards_delete;
+DROP TRIGGER IF EXISTS archived_merge_requests_insert;
+DROP TRIGGER IF EXISTS archived_merge_requests_update;
+DROP TRIGGER IF EXISTS archived_merge_requests_delete;
+DROP TRIGGER IF EXISTS archived_comments_insert;
+DROP TRIGGER IF EXISTS archived_comments_update;
+DROP TRIGGER IF EXISTS archived_comments_delete;
+DROP TRIGGER IF EXISTS archived_issue_labels_insert;
+DROP TRIGGER IF EXISTS archived_issue_labels_update;
+DROP TRIGGER IF EXISTS archived_issue_labels_delete;
+DROP TRIGGER IF EXISTS archived_merge_reviews_insert;
+DROP TRIGGER IF EXISTS archived_merge_reviews_update;
+DROP TRIGGER IF EXISTS archived_merge_reviews_delete;
+DROP TRIGGER IF EXISTS archived_merge_discussions_insert;
+DROP TRIGGER IF EXISTS archived_merge_discussions_update;
+DROP TRIGGER IF EXISTS archived_merge_discussions_delete;
+DROP TRIGGER IF EXISTS archived_merge_discussion_comments_insert;
+DROP TRIGGER IF EXISTS archived_merge_discussion_comments_update;
+DROP TRIGGER IF EXISTS archived_merge_discussion_comments_delete;
+
+DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS issue_labels;
+DROP TABLE IF EXISTS issue_boards;
+DROP TABLE IF EXISTS merge_discussion_comments;
+DROP TABLE IF EXISTS merge_discussions;
+DROP TABLE IF EXISTS merge_reviews;
+DROP TABLE IF EXISTS merge_issue_closures;
+DROP TABLE IF EXISTS issues;
+DROP TABLE IF EXISTS milestones;
+DROP TABLE IF EXISTS labels;
+DROP TABLE IF EXISTS merge_requests;
+DROP TABLE IF EXISTS releases;
+DROP TABLE IF EXISTS wiki_history;
+DROP TABLE IF EXISTS wiki_pages;

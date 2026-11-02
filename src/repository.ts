@@ -24,14 +24,7 @@ import {
   changeProjectState,
   archiveError,
 } from "./project-state";
-import {
-  plannedIssueClosures,
-  projectMerge,
-  type MergeResult,
-} from "./merge-issues";
-import { reviewMutation, reviewActor } from "./review-mutations";
 import { z } from "zod";
-import { reviewGate } from "./review";
 import { ObjectCache } from "./git/object-cache";
 import type { Repo } from "./types";
 import type { RefStorage } from "./git/repository";
@@ -148,25 +141,7 @@ export class Repository extends DurableObject<Env> {
         this.env.OBJECTS,
         this.ctx.storage,
       );
-      for (const [key, pending] of await this.ctx.storage.list<{
-        repo_id: string;
-        mr_id: number;
-        result: MergeResult;
-      }>({ prefix: "merge-projection:", limit: 10 })) {
-        await projectMerge(
-          this.env,
-          pending.repo_id,
-          pending.mr_id,
-          pending.result,
-        );
-        await this.ctx.storage.delete(key);
-      }
-      if (
-        receipts.pending ||
-        incomingPending ||
-        (await this.ctx.storage.list({ prefix: "merge-projection:", limit: 1 }))
-          .size
-      )
+      if (receipts.pending || incomingPending)
         await this.ctx.storage.setAlarm(
           Date.now() + (receipts.failed ? 30000 : 1000),
         );
@@ -312,20 +287,6 @@ export class Repository extends DurableObject<Env> {
           revision: z.number().int().min(0),
         })
         .parse(JSON.parse(text(await boundedBody(request, 4096))));
-      // Complete already-published merges before freezing D1 collaboration tables.
-      for (const [key, pending] of await this.ctx.storage.list<{
-        repo_id: string;
-        mr_id: number;
-        result: MergeResult;
-      }>({ prefix: "merge-projection:" })) {
-        await projectMerge(
-          this.env,
-          pending.repo_id,
-          pending.mr_id,
-          pending.result,
-        );
-        await this.ctx.storage.delete(key);
-      }
       if (url.pathname === "/internal/transfer") {
         if (!body.namespace || !body.name)
           fail(400, "Destination namespace and name required");
@@ -374,7 +335,6 @@ export class Repository extends DurableObject<Env> {
     const policy = JSON.parse(
       request.headers.get("x-write-policy") || '{"rules":[]}',
     );
-    let reviewedMerge: any = null;
     const publication: RefStorage = {
       get: <T>(key: string) => this.ctx.storage.get<T>(key),
       put: async (key, value) => {
@@ -382,21 +342,6 @@ export class Repository extends DurableObject<Env> {
         const next = value as Refs;
         const before = (await this.ctx.storage.get<Refs>("refs.v2")) || {};
         const values: Record<string, unknown> = { "refs.v2": next };
-        if (reviewedMerge) {
-          values["merge-result:" + reviewedMerge.id] = {
-            sha: next["refs/heads/" + reviewedMerge.target],
-            issue_ids: reviewedMerge.issue_ids,
-            actor_id: reviewedMerge.actor_id,
-            ...(reviewedMerge.queue_entry
-              ? { queue_id: reviewedMerge.queue_entry.id }
-              : {}),
-          };
-          values["merge-projection:" + reviewedMerge.id] = {
-            repo_id: id,
-            mr_id: reviewedMerge.id,
-            result: values["merge-result:" + reviewedMerge.id],
-          };
-        }
         let refsUpdated = 0;
         for (const ref of new Set([
           ...Object.keys(before),
@@ -441,121 +386,6 @@ export class Repository extends DurableObject<Env> {
     const ephemeral = request.headers.get("x-namespace") === "ephemeral",
       repo = select(ephemeral),
       path = url.pathname;
-    if (path === "/review-context" && request.method === "GET") {
-      const metadata = await this.env.DB.prepare(
-        "SELECT * FROM repositories WHERE id=? AND deleted_at IS NULL",
-      )
-        .bind(id)
-        .first<Repo>();
-      const mr = await this.env.DB.prepare(
-        "SELECT * FROM merge_requests WHERE id=? AND repo_id=?",
-      )
-        .bind(url.searchParams.get("id"), id)
-        .first<any>();
-      if (!metadata || !mr) fail(404, "Merge request not found");
-      if (String(mr.revision) !== url.searchParams.get("revision"))
-        fail(409, "Merge request changed; reload the review");
-      return Response.json({
-        gate: await reviewGate(this.env, metadata, mr, store),
-        closing_issues: await plannedIssueClosures(
-          this.env,
-          metadata,
-          mr,
-          store,
-          defaultBranch,
-        ),
-      });
-    }
-    if (
-      [
-        "/review-update",
-        "/review-submit",
-        "/review-discussion",
-        "/review-reply",
-        "/review-resolve",
-      ].includes(path) &&
-      request.method === "POST"
-    ) {
-      if (!metadata) fail(404, "Repository unavailable");
-      const raw = JSON.parse(text(await boundedBody(request, 128 * 1024)));
-      const reviewId = z.coerce.number().int().positive().parse(raw.id);
-      const completed = await this.ctx.storage.get<MergeResult>(
-        "merge-result:" + reviewId,
-      );
-      if (completed) {
-        await projectMerge(this.env, id, reviewId, completed);
-        fail(409, "Merge request already merged");
-      }
-      return Response.json(
-        await reviewMutation(this.env, repo, metadata, path, raw),
-      );
-    }
-    if (path === "/review-merge" && request.method === "POST") {
-      const body = JSON.parse(text(await boundedBody(request, 8192)));
-      const mr = await this.env.DB.prepare(
-        "SELECT * FROM merge_requests WHERE id=? AND repo_id=?",
-      )
-        .bind(body.id, id)
-        .first<any>();
-      if (!mr || !metadata) fail(404, "Merge request not found");
-      if ((await reviewActor(this.env, metadata, body.actor_id)).rank < 3)
-        fail(403, "Maintainer required");
-      const previous = await this.ctx.storage.get<MergeResult>(
-        "merge-result:" + mr.id,
-      );
-      if (previous || mr.state === "merged") {
-        const result = previous || { sha: mr.merged_sha };
-        await projectMerge(this.env, id, mr.id, result);
-        return Response.json(result);
-      }
-      if (mr.state !== "open") fail(409, "Merge request closed");
-      if (body.revision !== mr.revision)
-        fail(409, "Merge request changed; reload before merging");
-      if (
-        (mr.source_repo_id
-          ? body.source_sha !== mr.source_sha
-          : refs["refs/heads/" + mr.source] !== mr.source_sha) ||
-        refs["refs/heads/" + mr.target] !== mr.target_sha
-      )
-        fail(409, "Branches moved; refresh the merge request and review again");
-      const gate = await reviewGate(this.env, metadata, mr, store);
-      if (!gate.allowed) fail(409, gate.reasons.join("; "));
-      reviewedMerge = {
-        ...mr,
-        actor_id: body.actor_id,
-        issue_ids: await plannedIssueClosures(
-          this.env,
-          metadata,
-          mr,
-          store,
-          defaultBranch,
-        ),
-      };
-      const result = await repo.mergeBranches({
-        source_ref: mr.source_sha,
-        target_branch: mr.target,
-        expected_target_sha: mr.target_sha,
-        strategy: body.strategy || "ff_prefer",
-        squash: !!body.squash,
-        commit_message: "Merge !" + mr.id + ": " + mr.title,
-        author: {
-          name: request.headers.get("x-actor") || "ZQ-CfGit",
-          email: "merge@zq-cfgit.invalid",
-        },
-      });
-      if (result.result === "no_op") {
-        const gate = await reviewGate(this.env, metadata, mr, store);
-        if (!gate.allowed) fail(409, gate.reasons.join("; "));
-        await publication.put("refs.v2", refs);
-      }
-      await projectMerge(this.env, id, mr.id, {
-        sha: result.sha,
-        issue_ids: reviewedMerge.issue_ids,
-        actor_id: body.actor_id,
-      });
-      await this.ctx.storage.delete("merge-projection:" + mr.id);
-      return Response.json(result);
-    }
     const life = await lifecycle(request, repo, this.env, this.ctx.storage);
     if (life) return life;
     const q = Object.fromEntries(url.searchParams),
