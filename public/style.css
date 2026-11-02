@@ -554,6 +554,14 @@ p {
   color: var(--accent);
 }
 
+.repo-info .pill.archived {
+  margin-left: 8px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: #f0d9b8;
+  vertical-align: middle;
+}
+
 .repo-name .namespace {
   color: var(--muted-2);
   font-weight: 400;
