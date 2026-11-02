@@ -386,6 +386,44 @@ export class ForgeRepository extends GitRepository {
       },
     };
   }
+  async replaceSnapshot(b: {
+    target_branch: string;
+    commit_message: string;
+    author: SignatureIdentity;
+    committer?: SignatureIdentity;
+    files: { path: string; data: string; mode?: string }[];
+  }) {
+    this.branch(b.target_branch);
+    const ref = "refs/heads/" + b.target_branch,
+      old = this.refs[ref] || null;
+    if (!Array.isArray(b.files) || !b.files.length)
+      fail(400, "Sync requires at least one file");
+    const entries = new Map<string, TreeEntry>();
+    for (const f of b.files) {
+      this.path(f.path);
+      if (entries.has(f.path)) fail(400, "Duplicate path: " + f.path);
+      const mode =
+        f.mode && ["100644", "100755", "120000"].includes(f.mode)
+          ? f.mode
+          : "100644";
+      const sha = (await this.store.create("blob", unbase64(f.data))).oid;
+      entries.set(f.path, {
+        name: f.path.split("/").at(-1)!,
+        mode,
+        type: "blob",
+        sha,
+      });
+    }
+    const tree = await this.buildTree(entries),
+      commit = await this.writeCommit(tree, old ? [old] : [], b);
+    await this.publish({ ...this.refs, [ref]: commit.oid });
+    return {
+      sha: commit.oid,
+      tree_sha: tree,
+      blob_count: entries.size,
+      target_branch: b.target_branch,
+    };
+  }
   async restore(b: Omit<CommitInput, "files"> & { base_ref: string }) {
     this.branch(b.target_branch);
     const ref = "refs/heads/" + b.target_branch,

@@ -8,6 +8,7 @@ import { passwordProof } from "./account";
 import { repositoryRole, roleRank } from "./access";
 import { base64, unbase64 } from "./git/signatures";
 import { registerForgeRoutes } from "./forge-routes";
+import { fetchGithubSnapshot } from "./github-sync";
 import { verifyDelegation, requireScope } from "./delegation";
 import { Hono, type Context } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
@@ -744,6 +745,36 @@ app.post("/api/repos/:namespace/:repo/transfer", async (c) => {
       actor_id: requireUser(c).id,
     }),
   );
+});
+app.post("/api/repos/:namespace/:repo/sync", async (c) => {
+  const r = await repoAccess(c, "maintain");
+  if (c.get("delegation") || c.get("repoRole") !== "owner")
+    fail(403, "Project owner required");
+  const b = await input(
+    c,
+    z.object({ source: z.string().trim().min(1).max(500) }),
+  );
+  const snap = await fetchGithubSnapshot(b.source);
+  const u = requireUser(c);
+  const result = await engineJSON(c, r, "/import-files", {
+    target_branch: r.default_branch,
+    commit_message: `Sync from GitHub ${snap.owner}/${snap.name}@${snap.branch}`,
+    author: {
+      name: u.username,
+      email: u.username + "@users.zq-cfgit.local",
+    },
+    files: snap.files,
+  });
+  await c.env.DB.prepare("UPDATE repositories SET base_repo=? WHERE id=?")
+    .bind(`${snap.owner}/${snap.name}`, r.id)
+    .run();
+  await audit(c, "repo.sync", r.id, `${snap.owner}/${snap.name}@${snap.branch}`);
+  return c.json({
+    ...result,
+    source: `${snap.owner}/${snap.name}`,
+    branch: snap.branch,
+    files: snap.files.length,
+  });
 });
 app.put("/api/repos/:namespace/:repo/lifecycle", async (c) => {
   const r = await repoAccess(c, "maintain");

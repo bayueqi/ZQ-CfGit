@@ -562,6 +562,18 @@ export class Repository extends DurableObject<Env> {
           return Response.json(await target.commitFiles(body), { status: 201 });
       }
     }
+    if (request.method === "POST" && path === "/import-files") {
+      let body;
+      try {
+        body = JSON.parse(
+          text(await boundedBody(request, 32 * 1024 * 1024)),
+        );
+      } catch (e) {
+        if (e instanceof HTTPException) throw e;
+        fail(400, "Invalid JSON");
+      }
+      return Response.json(await repo.replaceSnapshot(body), { status: 201 });
+    }
     if (path === "/git/info/refs" && request.method === "GET") {
       const service = url.searchParams.get("service") || "";
       if (!["git-upload-pack", "git-receive-pack"].includes(service))

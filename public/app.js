@@ -611,7 +611,7 @@ async function settingsPage(r, base, ap, version) {
   repoLayout(
     r,
     "settings",
-    i18nHTML`<div class="stack">${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="project-lifecycle"><h2>${r.archived_at ? i18nText("恢复项目") : i18nText("归档项目")}</h2><p class="muted">归档后可继续 clone、下载和读取历史，但停止写入。</p><button type="submit" class="btn">${r.archived_at ? i18nText("取消归档") : i18nText("归档为只读")}</button></form></div>` : ""}${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">重命名项目</summary><form class="form" id="project-transfer">${field(i18nText("目标项目名"), "name", "text", r.name)}<button class="btn" type="submit">重命名</button></form></details>` : ""}<div class="panel"><form class="form" id="repo-settings"><h2>项目设置</h2>${textarea(i18nText("项目描述"), "description", r.description)}${field(i18nText("默认分支"), "default_branch", "text", r.default_branch)}<div class="field"><label for="visibility">可见性</label><select name="visibility" id="visibility"><option value="private" ${r.visibility === "private" ? "selected" : ""}>私有 · 仅成员可访问</option><option value="public" ${r.visibility === "public" ? "selected" : ""}>公开 · 所有人可读取</option></select></div><button class="btn primary" type="submit">保存设置</button></form></div><div class="panel"><div class="panelhead"><strong>审计记录</strong><span class="muted">最近 100 条</span></div>${events.map((e) => `<div class="token-row"><div><strong>${esc(e.action)}</strong><p class="muted">${esc(e.actor || "system")} · ${esc(e.detail)}</p></div><span class="muted">${date(e.created_at)}</span></div>`).join("")}</div></div>`,
+    i18nHTML`<div class="stack">${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="project-lifecycle"><h2>${r.archived_at ? i18nText("恢复项目") : i18nText("归档项目")}</h2><p class="muted">归档后可继续 clone、下载和读取历史，但停止写入。</p><button type="submit" class="btn">${r.archived_at ? i18nText("取消归档") : i18nText("归档为只读")}</button></form></div>` : ""}${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">重命名项目</summary><form class="form" id="project-transfer">${field(i18nText("目标项目名"), "name", "text", r.name)}<button class="btn" type="submit">重命名</button></form></details>` : ""}${r.role === "owner" && !r.archived_at ? i18nHTML`<div class="panel"><form class="form" id="github-sync"><h2>从 GitHub 同步</h2><div class="field"><label for="sync-source">GitHub 仓库</label><input id="sync-source" name="source" type="text" value="${esc(r.base_repo || "")}" placeholder="owner/name，例如 bayueqi/my-repo" required></div><button class="btn" type="submit">同步最新代码</button></form></div>` : ""}<div class="panel"><form class="form" id="repo-settings"><h2>项目设置</h2>${textarea(i18nText("项目描述"), "description", r.description)}${field(i18nText("默认分支"), "default_branch", "text", r.default_branch)}<div class="field"><label for="visibility">可见性</label><select name="visibility" id="visibility"><option value="private" ${r.visibility === "private" ? "selected" : ""}>私有 · 仅成员可访问</option><option value="public" ${r.visibility === "public" ? "selected" : ""}>公开 · 所有人可读取</option></select></div><button class="btn primary" type="submit">保存设置</button></form></div><div class="panel"><div class="panelhead"><strong>审计记录</strong><span class="muted">最近 100 条</span></div>${events.map((e) => `<div class="token-row"><div><strong>${esc(e.action)}</strong><p class="muted">${esc(e.actor || "system")} · ${esc(e.detail)}</p></div><span class="muted">${date(e.created_at)}</span></div>`).join("")}</div></div>`,
   );
   bindForm("#project-transfer", async (data) => {
     const result = await api(ap + "/transfer", {
@@ -630,6 +630,15 @@ async function settingsPage(r, base, ap, version) {
       body: { archived: !r.archived_at, revision: r.lifecycle_revision },
     });
     notice(r.archived_at ? i18nText("项目已恢复") : i18nText("项目已归档"));
+    render();
+  });
+  bindForm("#github-sync", async (data) => {
+    notice("正在从 GitHub 同步…");
+    const result = await api(ap + "/sync", {
+      method: "POST",
+      body: { source: data.source },
+    });
+    notice(`同步完成：${result.files} 个文件（${result.branch}）`);
     render();
   });
   if (r.archived_at)

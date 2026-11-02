@@ -25,6 +25,7 @@ export interface Repo {
   deleted_at?: string | null;
   archived_at?: string | null;
   lifecycle_revision?: number;
+  base_repo?: string | null;
 }
 export type App = {
   Bindings: Env;
