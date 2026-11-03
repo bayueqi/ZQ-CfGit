@@ -23,6 +23,9 @@ type Progress = TreeUpdates & {
   expires: number;
 };
 const MAX_BYTES = 96 * 1024;
+// Each round walks a slice of the first-parent history; the state is persisted, so a
+// larger slice means fewer round trips for the client without changing the result.
+const STEPS_PER_REQUEST = 16;
 // A bounded first-parent walk records when each current path last changed on
 // this branch, including mode changes and merged changes at the merge commit.
 export async function updatesAt(
@@ -86,7 +89,11 @@ export async function updatesAt(
       parseTree((await repo.store.get(oid)).data).map((e) => [e.name, e]),
     );
   };
-  for (let batch = 0; batch < 8 && !state.complete && !state.limited; batch++) {
+  for (
+    let batch = 0;
+    batch < STEPS_PER_REQUEST && !state.complete && !state.limited;
+    batch++
+  ) {
     if (!state.next) {
       state.complete = true;
       break;

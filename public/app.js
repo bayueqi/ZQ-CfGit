@@ -45,84 +45,134 @@ let booting = true,
   navigation = new AbortController(),
   cacheEpoch = 0;
 const pendingReads = new Map(),
-  repositoryMetadata = new Map(),
-  primedReads = new Map();
+  primedReads = new Map(),
+  readCache = new Map(),
+  refreshing = new Set();
+// 页面内读缓存：20 秒内直接复用；2 分钟内先用旧结果渲染，再后台刷新。
+const READ_FRESH = 20000,
+  READ_MAX_AGE = 120000,
+  READ_ENTRIES = 80;
+function cachedRead(path) {
+  const entry = readCache.get(path);
+  if (!entry) return;
+  if (Date.now() - entry.at > READ_MAX_AGE) {
+    readCache.delete(path);
+    return;
+  }
+  return entry;
+}
+function rememberRead(path, data) {
+  if (readCache.size >= READ_ENTRIES)
+    readCache.delete(readCache.keys().next().value);
+  readCache.set(path, { data, at: Date.now() });
+}
+// 切走再回来时，旧结果可能已被别处（例如命令行推送）改掉，直接作废。
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  const now = Date.now();
+  for (const [path, entry] of readCache)
+    if (now - entry.at > 30000) readCache.delete(path);
+});
+async function fetchJSON(path, options, signal) {
+  const r = await fetch("/api" + path, {
+    ...options,
+    signal,
+    headers: {
+      ...(options.body ? { "content-type": "application/json" } : {}),
+      ...options.headers,
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const text = await r.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    const error = new Error(
+      [504, 524].includes(r.status)
+        ? i18nText("操作超时，请稍后刷新确认结果")
+        : r.status >= 500
+          ? i18nText("服务暂时不可用，请稍后重试")
+          : i18nText("请求失败") + "（HTTP " + r.status + "）",
+    );
+    error.status = r.status;
+    throw error;
+  }
+  if (!r.ok) {
+    const error = new Error(
+      errorText(data.error) +
+        (data.details
+          ? (getLocale() === "en" ? ": " : "：") +
+            data.details
+              .map((i) => errorText(i.message))
+              .join(getLocale() === "en" ? "; " : "；")
+          : ""),
+    );
+    error.status = r.status;
+    throw error;
+  }
+  return data;
+}
+function revalidate(path, options) {
+  if (refreshing.has(path)) return;
+  refreshing.add(path);
+  const epoch = cacheEpoch;
+  void fetchJSON(path, options, undefined)
+    .then((data) => {
+      if (epoch === cacheEpoch) rememberRead(path, data);
+    })
+    .catch(() => {
+      // 后台刷新失败（例如权限或连接问题）时丢弃旧结果，下次重新读取。
+      if (epoch === cacheEpoch) readCache.delete(path);
+    })
+    .finally(() => refreshing.delete(path));
+}
 async function api(path, options = {}) {
   const reading = !options.method || options.method === "GET";
-  if (reading && primedReads.has(path)) {
-    const promise = primedReads.get(path);
-    primedReads.delete(path);
-    return promise;
-  }
-  const metadata = reading && /^\/repos\/[^/]+\/[^/]+$/.test(path);
-  if (metadata) {
-    const cached = repositoryMetadata.get(path);
-    if (cached && cached.expires > Date.now()) return cached.data;
-  }
-  if (reading && pendingReads.has(path)) return pendingReads.get(path);
   if (!reading) {
     cacheEpoch++;
-    repositoryMetadata.clear();
     pendingReads.clear();
     primedReads.clear();
+    readCache.clear();
+    refreshing.clear();
+    return fetchJSON(path, options, undefined);
   }
+  const primed = primedReads.get(path);
+  if (primed) {
+    primedReads.delete(path);
+    return primed;
+  }
+  // /tree-updates 是分轮推进的读取，同一个地址要逐次取新结果，不进缓存。
+  const cacheable = !/\/tree-updates(\?|$)/.test(path);
+  const entry = cacheable ? cachedRead(path) : undefined;
+  if (entry) {
+    if (Date.now() - entry.at > READ_FRESH) void revalidate(path, options);
+    return entry.data;
+  }
+  const pending = pendingReads.get(path);
+  if (pending) return pending.promise;
   const epoch = cacheEpoch;
-  const request = (async () => {
-    const r = await fetch("/api" + path, {
-      ...options,
-      signal: options.signal || (reading ? navigation.signal : undefined),
-      headers: {
-        ...(options.body ? { "content-type": "application/json" } : {}),
-        ...options.headers,
-      },
-      body: options.body ? JSON.stringify(options.body) : undefined,
-    });
-    const text = await r.text();
-    let data;
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      const error = new Error(
-        [504, 524].includes(r.status)
-          ? i18nText("操作超时，请稍后刷新确认结果")
-          : r.status >= 500
-            ? i18nText("服务暂时不可用，请稍后重试")
-            : i18nText("请求失败") + "（HTTP " + r.status + "）",
-      );
-      error.status = r.status;
-      throw error;
-    }
-    if (!r.ok) {
-      if ([401, 403, 404].includes(r.status)) repositoryMetadata.clear();
-      const error = new Error(
-        errorText(data.error) +
-          (data.details
-            ? (getLocale() === "en" ? ": " : "：") +
-              data.details
-                .map((i) => errorText(i.message))
-                .join(getLocale() === "en" ? "; " : "；")
-            : ""),
-      );
-      error.status = r.status;
-      throw error;
-    }
-    if (metadata && epoch === cacheEpoch) {
-      if (repositoryMetadata.size >= 20)
-        repositoryMetadata.delete(repositoryMetadata.keys().next().value);
-      repositoryMetadata.set(path, { data, expires: Date.now() + 15000 });
-    }
+  const request = fetchJSON(
+    path,
+    options,
+    options.signal || (options.prefetch ? undefined : navigation.signal),
+  ).then((data) => {
+    if (cacheable && epoch === cacheEpoch && !options.signal)
+      rememberRead(path, data);
     return data;
-  })();
-  if (reading) pendingReads.set(path, request);
+  });
+  const record = { promise: request, prefetch: !!options.prefetch };
+  pendingReads.set(path, record);
   try {
     return await request;
   } finally {
-    if (pendingReads.get(path) === request) pendingReads.delete(path);
-    if (!reading) {
-      cacheEpoch++;
-      repositoryMetadata.clear();
-    }
+    if (pendingReads.get(path) === record) pendingReads.delete(path);
   }
+}
+/** 换页时丢弃跟着旧信号走的读取；预取请求不随导航取消，继续填充缓存。 */
+function dropNavigatedReads() {
+  for (const [path, entry] of pendingReads)
+    if (!entry.prefetch) pendingReads.delete(path);
 }
 
 let selectedSpace = new URLSearchParams(location.search).get("namespace") || "";
@@ -202,35 +252,68 @@ function browseURL(ap) {
   if (q.get("ref")) params.set("ref", q.get("ref"));
   return ap + "/browse?" + params;
 }
-function primeRoute() {
-  const path = location.pathname,
-    parts = path.split("/").filter(Boolean);
-  const reads = [];
-  if (path === "/") {
-    const q = new URLSearchParams(location.search);
+/** 一个页面首屏需要的读请求，先并行发出，页面再取同一批结果。 */
+function routeReads(path, search) {
+  const parts = path.split("/").filter(Boolean),
+    query = new URLSearchParams(search),
+    reads = [];
+  if (!parts.length) {
+    const space = query.get("namespace") || selectedSpace;
     reads.push(
       "/repos?q=" +
-        encodeURIComponent(q.get("q") || "") +
+        encodeURIComponent(query.get("q") || "") +
         "&page=" +
-        (Number(q.get("page")) || 0) +
-        namespaceQuery(),
+        (Number(query.get("page")) || 0) +
+        (space ? "&namespace=" + encodeURIComponent(space) : ""),
     );
-  } else if (
-    parts.length >= 2 &&
-    !["settings", "admin"].includes(parts[0])
-  ) {
-    const ap = "/repos/" + parts[0] + "/" + parts[1];
-    reads.push(ap);
-    if (!parts[2]) reads.push(browseURL(ap));
-    else if (parts[2] === "commits")
-      reads.push(ap + "/" + parts[2] + (parts[3] ? "/" + parts[3] : ""));
+    return reads;
   }
+  if (parts[0] === "settings") {
+    if (parts[1] === "tokens") reads.push("/tokens");
+    return reads;
+  }
+  if (parts.length < 2 || ["login", "new", "admin"].includes(parts[0]))
+    return reads;
+  const ap = "/repos/" + parts[0] + "/" + parts[1],
+    tab = parts[2] || "";
+  reads.push(ap);
+  if (!tab) {
+    const params = new URLSearchParams({
+      path: query.get("path") || "",
+      view: query.get("view") === "blob" ? "blob" : "tree",
+    });
+    if (query.get("ref")) params.set("ref", query.get("ref"));
+    reads.push(ap + "/browse?" + params);
+  } else if (tab === "commits") {
+    if (!parts[3]) reads.push(ap + "/commits");
+    else {
+      const sha = encodeURIComponent(parts[3]);
+      reads.push(ap + "/commit?sha=" + sha, ap + "/diff?sha=" + sha);
+    }
+  } else if (tab === "forge") reads.push(ap + "/branches", ap + "/tags");
+  else if (tab === "search" && query.get("q"))
+    reads.push(ap + "/search?q=" + encodeURIComponent(query.get("q")));
+  return reads;
+}
+function primeRoute() {
   // Attach rejection handlers immediately; the page awaits the same in-flight reads.
-  for (const path of reads) {
+  for (const path of routeReads(location.pathname, location.search)) {
     const promise = api(path);
     primedReads.set(path, promise);
     promise.catch(() => {});
   }
+}
+/** 悬停即预取，点击后首屏直接从缓存或已完成的请求渲染。 */
+function prefetchRoute(href) {
+  let url;
+  try {
+    url = new URL(href, location.href);
+  } catch {
+    return;
+  }
+  if (url.origin !== location.origin) return;
+  for (const path of routeReads(url.pathname, url.search))
+    api(path, { prefetch: true }).catch(() => {});
 }
 
 function notice(message) {
@@ -252,6 +335,23 @@ document.addEventListener("click", (e) => {
     e.preventDefault();
     go(a.getAttribute("href"));
   }
+});
+// 停留即预取；指针移开或换到别的链接时取消，避免列表里逐个预取。
+let hoverTimer = 0,
+  hoverHref = "";
+document.addEventListener("pointerover", (event) => {
+  const target = event.target;
+  const a = target instanceof Element ? target.closest("a[data-link]") : null;
+  if (!a) return;
+  const href = a.getAttribute("href");
+  if (!href || href === hoverHref) return;
+  hoverHref = href;
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => prefetchRoute(href), 80);
+});
+document.addEventListener("pointerleave", () => {
+  clearTimeout(hoverTimer);
+  hoverHref = "";
 });
 window.addEventListener("popstate", render);
 const link = (path, label, cls = "") =>
@@ -312,8 +412,13 @@ function authPage() {
       method: "POST",
       body: { username: data.username, password: data.password },
     });
-    go("/");
+    go(nextTarget());
   });
+}
+/** 登录后回到原本要打开的页面。 */
+function nextTarget() {
+  const next = new URLSearchParams(location.search).get("next") || "";
+  return next.startsWith("/") && !next.startsWith("//") ? next : "/";
 }
 async function projects(version) {
   const query = new URLSearchParams(location.search),
@@ -408,8 +513,7 @@ function bindRefPicker(ap, base, branches, ref, defaultBranch, version) {
     return base + "?" + next;
   };
   const draw = () => {
-    const source =
-        state.kind === "branches" ? branches : state.tags || [],
+    const source = state.kind === "branches" ? branches : state.tags || [],
       query = state.query.trim().toLowerCase(),
       items = source.filter(
         (item) => !query || item.name.toLowerCase().includes(query),
@@ -584,7 +688,11 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
               ["blame", "Blame"],
             ])
             .map(([key, label]) =>
-              link(blobHref(key), label, `seg-item${tab === key ? " active" : ""}`),
+              link(
+                blobHref(key),
+                label,
+                `seg-item${tab === key ? " active" : ""}`,
+              ),
             )
             .join("")}</div>`
         : "",
@@ -741,7 +849,8 @@ async function loadFileUpdates(ap, sha, path, version) {
     ]),
   );
   try {
-    for (let batch = 0; batch < 626 && version === routeVersion; batch++) {
+    // 服务端每轮推进一批提交，够用就停；剩余文件显示占位，不在首屏耗时间。
+    for (let batch = 0; batch < 12 && version === routeVersion; batch++) {
       const result = await api(url);
       if (
         version !== routeVersion ||
@@ -986,12 +1095,29 @@ async function render() {
   if (hasRendered) {
     navigation.abort();
     navigation = new AbortController();
-    pendingReads.clear();
+    dropNavigatedReads();
     primedReads.clear();
   }
   hasRendered = true;
   const version = ++routeVersion;
   const path = location.pathname;
+  // 未登录（或尚未初始化）时不进入任何内部页面，直接给登录界面。
+  if (!user || setup) {
+    if (path !== "/login") {
+      const next = path === "/" ? "" : path + location.search;
+      history.replaceState(
+        {},
+        "",
+        "/login" + (next ? "?next=" + encodeURIComponent(next) : ""),
+      );
+    }
+    authPage();
+    return;
+  }
+  if (path === "/login") {
+    history.replaceState({}, "", "/");
+    return render();
+  }
   if (path === "/")
     selectedSpace = new URLSearchParams(location.search).get("namespace") || "";
   const titles = {
@@ -1019,10 +1145,6 @@ async function render() {
   );
   primeRoute();
   try {
-    if (path === "/login" || setup) {
-      authPage();
-      return;
-    }
     if (path === "/new") {
       await newProject();
       return;
@@ -1087,6 +1209,11 @@ async function render() {
       applyMarkdown({ base, ref: r.default_branch }).catch(() => {});
   } catch (e) {
     if (version !== routeVersion) return;
+    if (e.status === 401) {
+      user = null;
+      go("/login");
+      return;
+    }
     layout(
       `<div class="error">${esc(e.message)}</div>${link("/", i18nText("返回项目列表"), "btn")}`,
       i18nText("暂时无法打开"),
