@@ -320,7 +320,7 @@ export class Repository extends DurableObject<Env> {
       get: <T>(key: string) => this.ctx.storage.get<T>(key),
       put: async (key, value) => {
         // Snapshot import staging is repository-scoped state, not a ref publication.
-        if (key === "import:pending") {
+        if (key.startsWith("import:")) {
           await this.ctx.storage.put(key, value);
           return;
         }
@@ -425,6 +425,16 @@ export class Repository extends DurableObject<Env> {
         fail(400, "Invalid JSON");
       }
       return Response.json(await repo.replaceSnapshot(body), { status: 201 });
+    }
+    if (request.method === "POST" && path === "/import-blob-ref") {
+      let ref;
+      try {
+        ref = JSON.parse(text(await boundedBody(request, 64 * 1024)));
+      } catch (e) {
+        if (e instanceof HTTPException) throw e;
+        fail(400, "Invalid JSON");
+      }
+      return Response.json(await repo.stageBlobRef(ref), { status: 201 });
     }
     if (path === "/git/info/refs" && request.method === "GET") {
       const service = url.searchParams.get("service") || "";

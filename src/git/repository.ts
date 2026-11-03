@@ -103,9 +103,9 @@ export class GitRepository {
     const { oid, entry } = await this.entry(ref, this.path(path));
     if (entry.type !== "blob") fail(400, "Path is not a file");
     const object = await this.store.get(entry.sha);
-    if (object.data.length > 1024 * 1024)
-      fail(413, "Browser file limit is 1 MiB; use git clone");
     const binary = object.data.includes(0);
+    if (!binary && object.data.length > 8 * 1024 * 1024)
+      fail(413, "Browser file limit is 8 MiB; use git clone");
     return {
       ref: oid,
       path,
@@ -241,18 +241,21 @@ export class GitRepository {
       ? parseCommit(await this.store.get(parent)).tree
       : undefined;
     const paths = new Set<string>();
+    let totalBytes = 0;
     for (const file of b.files) {
       this.path(file.path);
       if (file.path.split("/").length > LIMITS.depth)
         fail(400, "Path too deep");
       if (paths.has(file.path)) fail(400, "Duplicate edit path");
       paths.add(file.path);
-      if (
-        file.content !== null &&
-        (typeof file.content !== "string" ||
-          bytes(file.content).length > 1024 * 1024)
-      )
-        fail(413, "File exceeds 1 MiB");
+      if (file.content !== null) {
+        if (typeof file.content !== "string") fail(413, "Invalid file content");
+        const size = bytes(file.content).length;
+        if (size > 8 * 1024 * 1024) fail(413, "File exceeds 8 MiB");
+        totalBytes += size;
+        if (totalBytes > 16 * 1024 * 1024)
+          fail(413, "一次提交的文件总量超过 16 MiB");
+      }
       tree = await this.editTree(tree, file.path.split("/"), file.content);
     }
     const name = (b.author || "ZQ-CfGit").replace(/[\n\r<>\0]/g, ""),

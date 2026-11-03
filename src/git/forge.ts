@@ -292,17 +292,20 @@ export class ForgeRepository extends GitRepository {
     files: { path: string; data: string; mode?: string }[];
     append?: boolean;
     final?: boolean;
+    /** 单次同步的暂存命名空间，避免上一轮中断留下的列表污染新一轮。 */
+    token?: string;
   }) {
     this.branch(b.target_branch);
     const ref = "refs/heads/" + b.target_branch,
       old = this.refs[ref] || null;
     if (!Array.isArray(b.files)) fail(400, "Invalid file list");
     const incremental = b.append === true;
-    if (!incremental && !b.files.length)
+    if (!incremental && !b.files.length && b.final !== false)
       fail(400, "Sync requires at least one file");
+    const pendingKey = "import:" + (b.token || "pending");
     const staged: { path: string; sha: string; mode: string }[] = incremental
       ? ((await this.storage.get<{ path: string; sha: string; mode: string }[]>(
-          "import:pending",
+          pendingKey,
         )) ?? [])
       : [];
     const seen = new Set(staged.map((e) => e.path));
@@ -331,7 +334,7 @@ export class ForgeRepository extends GitRepository {
     await this.store.flush(16);
     this.store.flushHints();
     if (b.final === false) {
-      await this.storage.put("import:pending", staged);
+      await this.storage.put(pendingKey, staged);
       return {
         staged: staged.length,
         blob_count: 0,
@@ -349,13 +352,39 @@ export class ForgeRepository extends GitRepository {
     const tree = await this.buildTree(entries),
       commit = await this.writeCommit(tree, old ? [old] : [], b);
     await this.publish({ ...this.refs, [ref]: commit.oid });
-    await this.storage.put("import:pending", []);
+    await this.storage.put(pendingKey, []);
     return {
       sha: commit.oid,
       tree_sha: tree,
       blob_count: entries.size,
       target_branch: b.target_branch,
     };
+  }
+  /** 大文件由调用方直接写入 R2，这里只登记暂存条目与索引提示。 */
+  async stageBlobRef(b: {
+    path: string;
+    mode: string;
+    oid: string;
+    size: number;
+    token?: string;
+  }) {
+    this.path(b.path);
+    const pendingKey = "import:" + (b.token || "pending");
+    const staged =
+      (await this.storage.get<{ path: string; sha: string; mode: string }[]>(
+        pendingKey,
+      )) ?? [];
+    if (staged.some((e) => e.path === b.path))
+      fail(400, "Duplicate path: " + b.path);
+    staged.push({
+      path: b.path,
+      sha: b.oid,
+      mode: ["100644", "100755", "120000"].includes(b.mode) ? b.mode : "100644",
+    });
+    await this.storage.put(pendingKey, staged);
+    this.store.noteObject(b.oid, "blob", b.size);
+    this.store.flushHints();
+    return { staged: staged.length, oid: b.oid };
   }
   async rawFile(request: Request, ref: string, path: string) {
     const { oid, entry } = await this.entry(ref, this.path(path));

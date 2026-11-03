@@ -2,17 +2,22 @@ import { HTTPException } from "hono/http-exception";
 import { fail } from "./security";
 
 /** 单文件与仓库总量上限，均为解压后的原始字节。 */
-const MAX_FILE = 24 * 1024 * 1024;
-const MAX_TOTAL = 30 * 1024 * 1024;
+const MAX_FILE = 12 * 1024 * 1024;
+const MAX_TOTAL = 64 * 1024 * 1024;
 const MAX_FILES = 3000;
 /** 每个批次的原始字节与文件数上限，避免单个请求内的存储调用超过运行时配额。 */
-const BATCH_BYTES = 6 * 1024 * 1024;
-const BATCH_FILES = 300;
+const BATCH_BYTES = 4 * 1024 * 1024;
+const BATCH_FILES = 200;
 
 export interface SyncFile {
   path: string;
-  data: string;
+  data: Uint8Array;
   mode: string;
+}
+
+export interface SkippedFile {
+  path: string;
+  size: number;
 }
 
 export interface GithubSnapshotInfo {
@@ -20,6 +25,8 @@ export interface GithubSnapshotInfo {
   name: string;
   branch: string;
   files: number;
+  /** 超过单文件上限而被跳过的条目，整仓仍然按其余文件完成同步。 */
+  skipped: SkippedFile[];
 }
 
 export type SyncBatchSink = (files: SyncFile[]) => Promise<void>;
@@ -29,7 +36,7 @@ function cstr(data: Uint8Array): string {
   return new TextDecoder().decode(end < 0 ? data : data.subarray(0, end));
 }
 
-function bytesToBase64(data: Uint8Array): string {
+export function bytesToBase64(data: Uint8Array): string {
   // Encode in 3-byte-aligned slices so no full-size binary string is ever built.
   const SLICE = 0x4000 * 3;
   let out = "";
@@ -39,19 +46,6 @@ function bytesToBase64(data: Uint8Array): string {
     for (let j = 0; j < slice.length; j += 0x4000)
       bin += String.fromCharCode(...slice.subarray(j, j + 0x4000));
     out += btoa(bin);
-  }
-  return out;
-}
-
-function join(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
-  if (parts.length === 1) return parts[0] as Uint8Array<ArrayBuffer>;
-  let total = 0;
-  for (const p of parts) total += p.length;
-  const out = new Uint8Array(total);
-  let at = 0;
-  for (const p of parts) {
-    out.set(p, at);
-    at += p.length;
   }
   return out;
 }
@@ -99,7 +93,8 @@ type Pending = {
   /** 有效内容字节数 */
   content: number;
   got: number;
-  parts: Uint8Array[];
+  /** 按声明大小一次性分配，边读边写，避免分片数组与最终拼接同时驻留 */
+  buffer: Uint8Array;
 };
 
 const strip = (n: string) => {
@@ -111,7 +106,10 @@ const strip = (n: string) => {
  * 流式解析归档：解压、拆包、分批交出去，任何时刻只保留一个批次和当前文件。
  * 返回文件总数。
  */
-async function readTar(resp: Response, sink: SyncBatchSink): Promise<number> {
+async function readTar(
+  resp: Response,
+  sink: SyncBatchSink,
+): Promise<{ count: number; skipped: SkippedFile[] }> {
   if (!resp.body) fail(503, "GitHub 未返回归档内容");
   let reader: ReadableStreamDefaultReader<Uint8Array>;
   try {
@@ -121,13 +119,55 @@ async function readTar(resp: Response, sink: SyncBatchSink): Promise<number> {
   } catch {
     fail(503, "解压 GitHub 归档失败");
   }
-  let buf: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
+  // 分块队列：解压流有时一次吐出很大的数据块，不能每轮都整体复制。
+  const queue: Uint8Array[] = [];
+  let qoff = 0;
+  let qlen = 0;
   let batch: SyncFile[] = [];
+
+  const pushChunk = (value: Uint8Array) => {
+    if (!value.length) return;
+    queue.push(value);
+    qlen += value.length;
+  };
+  const peek = (n: number) => {
+    const first = queue[0];
+    if (first && first.length - qoff >= n) return first.subarray(qoff, qoff + n);
+    const out = new Uint8Array(n);
+    let filled = 0;
+    for (let i = 0; i < queue.length && filled < n; i++) {
+      const chunk = i === 0 ? queue[0].subarray(qoff) : queue[i];
+      const take = Math.min(chunk.length, n - filled);
+      out.set(chunk.subarray(0, take), filled);
+      filled += take;
+    }
+    return out;
+  };
+  const takePart = (want: number) => {
+    const first = queue[0];
+    const avail = first.length - qoff;
+    if (avail <= want) {
+      const part = qoff ? first.subarray(qoff) : first;
+      queue.shift();
+      qoff = 0;
+      qlen -= part.length;
+      return part;
+    }
+    const part = first.subarray(qoff, qoff + want);
+    qoff += want;
+    qlen -= want;
+    return part;
+  };
+  const discard = (n: number) => {
+    let left = n;
+    while (left > 0) left -= takePart(left).length;
+  };
   let batchBytes = 0;
   let total = 0,
     count = 0;
   let paxPath: string | undefined;
   let pending: Pending | null = null;
+  const skipped: SkippedFile[] = [];
 
   const flushBatch = async () => {
     if (!batch.length) return;
@@ -147,7 +187,7 @@ async function readTar(resp: Response, sink: SyncBatchSink): Promise<number> {
     if (batch.length && batchBytes + data.length > BATCH_BYTES) await flushBatch();
     batch.push({
       path,
-      data: bytesToBase64(data),
+      data,
       mode: mode & 0o111 ? "100755" : "100644",
     });
     batchBytes += data.length;
@@ -159,14 +199,18 @@ async function readTar(resp: Response, sink: SyncBatchSink): Promise<number> {
     for (;;) {
       if (pending) {
         if (pending.remaining > 0) {
-          if (!buf.length) return;
-          const take = Math.min(pending.remaining, buf.length),
+          if (!qlen) return;
+          const take = Math.min(pending.remaining, qlen),
             contentTake = Math.min(take, pending.content - pending.got);
-          if (contentTake > 0) {
-            pending.parts.push(buf.subarray(0, contentTake));
-            pending.got += contentTake;
+          let need = contentTake;
+          while (need > 0) {
+            const part = takePart(need);
+            if (pending.kind !== "skip") pending.buffer.set(part, pending.got);
+            pending.got += part.length;
+            need -= part.length;
           }
-          buf = buf.subarray(take);
+          let skip = take - contentTake;
+          while (skip > 0) skip -= takePart(skip).length;
           pending.remaining -= take;
           continue;
         }
@@ -174,7 +218,7 @@ async function readTar(resp: Response, sink: SyncBatchSink): Promise<number> {
         pending = null;
         if (job.kind === "pax") {
           for (const line of new TextDecoder()
-            .decode(join(job.parts))
+            .decode(job.buffer)
             .split("\n")) {
             const m = line.match(/^\d+ path=(.*)$/);
             if (m) paxPath = m[1];
@@ -199,14 +243,12 @@ async function readTar(resp: Response, sink: SyncBatchSink): Promise<number> {
           full.includes("\r")
         )
           fail(400, "归档路径不安全");
-        const content = join(job.parts);
-        job.parts.length = 0;
-        await pushFile(full, job.mode, content);
+        await pushFile(full, job.mode, job.buffer);
         continue;
       }
-      if (buf.length < 512) return;
-      const header = buf.subarray(0, 512);
-      buf = buf.subarray(512);
+      if (qlen < 512) return;
+      const header = peek(512);
+      discard(512);
       if (header.every((b) => b === 0)) return;
       const hname = cstr(header.subarray(0, 100));
       const mode = parseInt(cstr(header.subarray(100, 108)).trim() || "0", 8);
@@ -215,11 +257,20 @@ async function readTar(resp: Response, sink: SyncBatchSink): Promise<number> {
       const prefix = cstr(header.subarray(345, 500));
       const full = prefix ? prefix + "/" + hname : hname;
       if (!Number.isSafeInteger(size) || size < 0) fail(400, "归档数据损坏");
-      if (size > MAX_FILE)
-        fail(
-          413,
-          `文件过大：${full}（${(size / 1048576).toFixed(1)} MB，上限 ${MAX_FILE / 1048576} MB）`,
-        );
+      if (size > MAX_FILE) {
+        // 大文件跳过而不是整仓失败：其余文件仍然可以完整同步。
+        skipped.push({ path: strip(full), size });
+        pending = {
+          kind: "skip",
+          path: full,
+          mode,
+          remaining: Math.ceil(size / 512) * 512,
+          content: size,
+          got: 0,
+          buffer: new Uint8Array(0),
+        };
+        continue;
+      }
       pending = {
         kind:
           type === 120 || type === 103
@@ -232,7 +283,7 @@ async function readTar(resp: Response, sink: SyncBatchSink): Promise<number> {
         remaining: Math.ceil(size / 512) * 512,
         content: size,
         got: 0,
-        parts: [],
+        buffer: new Uint8Array(size),
       };
     }
   };
@@ -240,17 +291,16 @@ async function readTar(resp: Response, sink: SyncBatchSink): Promise<number> {
   try {
     for (;;) {
       const { done, value } = await reader.read();
-      if (value?.length) {
-        buf = buf.length ? join([buf, value]) : value;
-      }
-      await drain();      if (done) break;
+      if (value?.length) pushChunk(value);
+      await drain();
+      if (done) break;
     }
     await flushBatch();
   } catch (e) {
     if (e instanceof HTTPException) throw e;
     fail(503, "解压 GitHub 归档失败");
   }
-  return count;
+  return { count, skipped };
 }
 
 /** 下载并流式解析 GitHub 仓库快照，每累计一个批次调用一次 sink。 */
@@ -277,7 +327,7 @@ export async function streamGithubSnapshot(
     }
   }
   if (!resp) fail(404, "无法从 GitHub 下载该仓库（可能不存在或非公开）");
-  const files = await readTar(resp, sink);
-  if (!files) fail(400, "该 GitHub 仓库没有可同步的文件");
-  return { owner, name, branch: used, files };
+  const { count, skipped } = await readTar(resp, sink);
+  if (!count) fail(400, "该 GitHub 仓库没有可同步的文件");
+  return { owner, name, branch: used, files: count, skipped };
 }

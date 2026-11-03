@@ -113,6 +113,13 @@ export async function boundedBody(
   if (Number(request.headers.get("content-length") || 0) > max)
     fail(413, "Request too large");
   if (!request.body) return new Uint8Array();
+  // 有确切的 Content-Length 时直接整体读取，避免 chunks 数组与结果缓冲同时驻留。
+  const declared = Number(request.headers.get("content-length") || 0);
+  if (declared > 0) {
+    const buf = new Uint8Array(await new Response(request.body).arrayBuffer());
+    if (buf.length > max) fail(413, "Request too large");
+    return buf;
+  }
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;

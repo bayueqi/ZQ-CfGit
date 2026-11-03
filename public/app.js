@@ -653,7 +653,7 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
     const failed = () => {
       preview.hidden = true;
       document.querySelector("#preview-caption").textContent = i18nText(
-        "无法预览：仅支持有效的 PNG、JPEG、GIF、WebP 图片，且不超过 5 MiB。",
+        "无法预览：仅支持有效的 PNG、JPEG、GIF、WebP 图片，且不超过 24 MiB。",
       );
     };
     preview.addEventListener("error", failed);
@@ -914,7 +914,15 @@ async function settingsPage(r, base, ap, version) {
       method: "POST",
       body: { source: data.source },
     });
-    notice(`同步完成：${result.files} 个文件（${result.branch}）`);
+    const skipped = Array.isArray(result.skipped) ? result.skipped : [];
+    notice(
+      skipped.length
+        ? `同步完成：${result.files} 个文件（${result.branch}），跳过 ${skipped.length} 个超过 12 MiB 的文件：${skipped
+            .slice(0, 5)
+            .map((f) => f.path)
+            .join("、")}`
+        : `同步完成：${result.files} 个文件（${result.branch}）`,
+    );
     render();
   });
   if (r.archived_at)

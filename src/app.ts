@@ -6,9 +6,14 @@ import { projectDatabase } from "./project-db";
 import { archivedApiWrite, archiveError } from "./project-state";
 import { passwordProof } from "./account";
 import { repositoryRole } from "./access";
+import { sha1Parts } from "./git/objects";
 import { base64, unbase64 } from "./git/signatures";
 import { registerForgeRoutes } from "./forge-routes";
-import { streamGithubSnapshot } from "./github-sync";
+import {
+  streamGithubSnapshot,
+  bytesToBase64,
+  type SyncFile,
+} from "./github-sync";
 import { Hono, type Context } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
@@ -32,8 +37,12 @@ const userInput = z.object({
   username: slug,
   password: z.string().min(12).max(128),
 });
-async function input<T>(c: Context<App>, schema: z.ZodType<T>): Promise<T> {
-  const b = await boundedBody(c.req.raw, 2 * 1024 * 1024);
+async function input<T>(
+  c: Context<App>,
+  schema: z.ZodType<T>,
+  limit = 2 * 1024 * 1024,
+): Promise<T> {
+  const b = await boundedBody(c.req.raw, limit);
   let data;
   try {
     data = JSON.parse(new TextDecoder().decode(b));
@@ -686,18 +695,58 @@ app.post("/api/repos/:namespace/:repo/sync", async (c) => {
       name: u.username,
       email: u.username + "@users.zq-cfgit.local",
     };
-  let first = true;
-  const snap = await streamGithubSnapshot(b.source, async (files) => {
-    const append = !first;
-    first = false;
+  // 每次同步使用独立的暂存命名空间，避免上一轮超时留下的列表污染本轮
+  const token = crypto.randomUUID();
+  let appended = false;
+  const sendBatch = async (files: SyncFile[]) => {
     await engineJSON(c, r, "/import-files", {
       target_branch: r.default_branch,
       commit_message: "Sync from GitHub " + b.source,
       author,
-      files,
-      append,
+      files: files.map((f) => ({
+        path: f.path,
+        data: bytesToBase64(f.data),
+        mode: f.mode,
+      })),
+      append: appended,
       final: false,
+      token,
     });
+    appended = true;
+  };
+  const sendLarge = async (file: SyncFile) => {
+    // 大文件由主 Worker 直接写入 R2，避免 DO 常驻实例反复持有几十 MB 数据；
+    // 分段算 ID、Blob 拼接口，都不再复制整份文件。
+    const header = new TextEncoder().encode(`blob ${file.data.length}\0`),
+      payload = new Uint8Array(header.length + file.data.length);
+    payload.set(header);
+    payload.set(file.data, header.length);
+    const oid = sha1Parts([payload]);
+    await c.env.OBJECTS.put(`repos/${r.id}/objects/${oid}`, payload, {
+      onlyIf: { etagDoesNotMatch: "*" },
+      httpMetadata: { contentType: "application/octet-stream" },
+    });
+    await engineJSON(c, r, "/import-blob-ref", {
+      path: file.path,
+      mode: file.mode,
+      oid,
+      size: file.data.length,
+      token,
+    });
+    appended = true;
+  };
+  const snap = await streamGithubSnapshot(b.source, async (files) => {
+    const small: SyncFile[] = [];
+    for (const file of files) {
+      // 大文件单独二进制直传，避免 base64 把内存峰值放大到三四倍
+      if (file.data.length <= 1024 * 1024) {
+        small.push(file);
+        continue;
+      }
+      if (small.length) await sendBatch(small.splice(0));
+      await sendLarge(file);
+    }
+    if (small.length) await sendBatch(small);
   });
   const result = await engineJSON(c, r, "/import-files", {
     target_branch: r.default_branch,
@@ -706,6 +755,7 @@ app.post("/api/repos/:namespace/:repo/sync", async (c) => {
     files: [],
     append: true,
     final: true,
+    token,
   });
   await c.env.DB.prepare("UPDATE repositories SET base_repo=? WHERE id=?")
     .bind(`${snap.owner}/${snap.name}`, r.id)
@@ -715,6 +765,7 @@ app.post("/api/repos/:namespace/:repo/sync", async (c) => {
     source: `${snap.owner}/${snap.name}`,
     branch: snap.branch,
     files: snap.files,
+    skipped: snap.skipped,
   });
 });
 app.put("/api/repos/:namespace/:repo/lifecycle", async (c) => {
@@ -777,7 +828,7 @@ app.get("/api/repos/:namespace/:repo/preview", async (c) => {
   const r = await repoAccess(c),
     response = await engine(c, r, "/file" + new URL(c.req.url).search);
   if (!response.ok) return response;
-  const bytes = await boundedBody(response, 5 * 1024 * 1024),
+  const bytes = await boundedBody(response, 24 * 1024 * 1024),
     is = (start: number, values: number[]) =>
       values.every((x, i) => bytes[start + i] === x);
   const mime = is(0, [137, 80, 78, 71, 13, 10, 26, 10])
@@ -828,13 +879,14 @@ app.post("/api/repos/:namespace/:repo/commit", async (c) => {
             path: z.string().min(1).max(1000),
             content: z
               .string()
-              .max(1024 * 1024)
+              .max(8 * 1024 * 1024)
               .nullable(),
           }),
         )
         .min(1)
         .max(30),
     }),
+    24 * 1024 * 1024,
   );
   const result = await engineJSON(c, r, "/commit", {
     ...b,

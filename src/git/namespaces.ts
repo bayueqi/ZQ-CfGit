@@ -28,7 +28,7 @@ export function namespaceRepositories(
         key === "refs.v2" ? (refs as T) : storage.get<T>(key),
       put: async (key, value) => {
         // Snapshot import staging is repository-scoped state, not a ref namespace.
-        if (key === "import:pending") return storage.put(key, value);
+        if (key.startsWith("import:")) return storage.put(key, value);
         if (key !== "refs.v2") fail(400, "Unexpected namespace storage key");
         const next = value as Refs;
         for (const name of Object.keys(next))
