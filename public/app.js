@@ -609,7 +609,7 @@ async function settingsPage(r, base, ap, version) {
   repoLayout(
     r,
     "settings",
-    i18nHTML`<div class="stack">${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="project-lifecycle"><h2>${r.archived_at ? i18nText("恢复项目") : i18nText("归档项目")}</h2><p class="muted">归档后可继续 clone、下载和读取历史，但停止写入。</p><button type="submit" class="btn">${r.archived_at ? i18nText("取消归档") : i18nText("归档为只读")}</button></form></div>` : ""}${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">重命名项目</summary><form class="form" id="project-transfer">${field(i18nText("目标项目名"), "name", "text", r.name)}<button class="btn" type="submit">重命名</button></form></details>` : ""}${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="github-sync"><h2>从 GitHub 同步</h2><div class="field"><label for="sync-source">GitHub 仓库</label><input id="sync-source" name="source" type="text" value="${esc(r.base_repo || "")}" placeholder="owner/name，例如 bayueqi/my-repo" required></div><button class="btn" type="submit">同步最新代码</button></form></div>` : ""}<div class="panel"><form class="form" id="repo-settings"><h2>项目设置</h2>${textarea(i18nText("项目描述"), "description", r.description)}${field(i18nText("默认分支"), "default_branch", "text", r.default_branch)}<button class="btn primary" type="submit">保存设置</button></form></div></div>`,
+    i18nHTML`<div class="stack">${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="project-lifecycle"><h2>${r.archived_at ? i18nText("恢复项目") : i18nText("归档项目")}</h2><p class="muted">归档后可继续 clone、下载和读取历史，但停止写入。</p><button type="submit" class="btn">${r.archived_at ? i18nText("取消归档") : i18nText("归档为只读")}</button></form></div>` : ""}${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">重命名项目</summary><form class="form" id="project-transfer">${field(i18nText("目标项目名"), "name", "text", r.name)}<button class="btn" type="submit">重命名</button></form></details>` : ""}${r.role === "owner" ? i18nHTML`<div class="panel"><form class="form" id="github-sync"><h2>从 GitHub 同步</h2><div class="field"><label for="sync-source">GitHub 仓库</label><input id="sync-source" name="source" type="text" value="${esc(r.base_repo || "")}" placeholder="owner/name，例如 bayueqi/my-repo" required></div><button class="btn" type="submit">同步最新代码</button></form></div>` : ""}<div class="panel"><form class="form" id="repo-settings"><h2>项目设置</h2>${textarea(i18nText("项目描述"), "description", r.description)}${field(i18nText("默认分支"), "default_branch", "text", r.default_branch)}<button class="btn primary" type="submit">保存设置</button></form></div>${r.role === "owner" ? i18nHTML`<details class="panel"><summary class="panelhead">删除项目</summary><form class="form" id="project-delete"><div class="field"><label>输入项目名确认</label><input name="confirm" type="text" required autocomplete="off" placeholder="${esc(r.name)}"></div><button class="btn danger" type="submit">删除项目</button></form></details>` : ""}</div>`,
   );
   bindForm("#project-transfer", async (data) => {
     const result = await api(ap + "/transfer", {
@@ -649,6 +649,12 @@ async function settingsPage(r, base, ap, version) {
     await api(ap, { method: "PATCH", body: data });
     notice(i18nText("项目设置已保存"));
     render();
+  });
+  bindForm("#project-delete", async (data) => {
+    if (data.confirm !== r.name) throw new Error(i18nText("项目名不匹配"));
+    await api(ap, { method: "DELETE" });
+    notice(i18nText("项目已删除"));
+    go("/");
   });
 }
 async function tokensPage(version) {
