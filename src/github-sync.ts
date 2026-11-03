@@ -3,10 +3,11 @@ import { fail } from "./security";
 
 /** 单文件与仓库总量上限，均为解压后的原始字节。 */
 const MAX_FILE = 24 * 1024 * 1024;
-const MAX_TOTAL = 60 * 1024 * 1024;
+const MAX_TOTAL = 30 * 1024 * 1024;
 const MAX_FILES = 3000;
-/** 每个批次向上游发送的原始字节数，用于把常驻内存压在一个固定水位。 */
+/** 每个批次的原始字节与文件数上限，避免单个请求内的存储调用超过运行时配额。 */
 const BATCH_BYTES = 6 * 1024 * 1024;
+const BATCH_FILES = 300;
 
 export interface SyncFile {
   path: string;
@@ -29,10 +30,17 @@ function cstr(data: Uint8Array): string {
 }
 
 function bytesToBase64(data: Uint8Array): string {
-  let bin = "";
-  for (let i = 0; i < data.length; i += 0x8000)
-    bin += String.fromCharCode(...data.subarray(i, i + 0x8000));
-  return btoa(bin);
+  // Encode in 3-byte-aligned slices so no full-size binary string is ever built.
+  const SLICE = 0x4000 * 3;
+  let out = "";
+  for (let i = 0; i < data.length; i += SLICE) {
+    const slice = data.subarray(i, i + SLICE);
+    let bin = "";
+    for (let j = 0; j < slice.length; j += 0x4000)
+      bin += String.fromCharCode(...slice.subarray(j, j + 0x4000));
+    out += btoa(bin);
+  }
+  return out;
 }
 
 function join(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
@@ -135,13 +143,16 @@ async function readTar(resp: Response, sink: SyncBatchSink): Promise<number> {
       fail(413, `仓库解压后超过 ${MAX_TOTAL / 1048576} MB，请改用 git push 同步`);
     count++;
     if (count > MAX_FILES) fail(413, "文件数量过多，无法一次性同步");
+    // 大文件不与现有批次合并，保证单次请求的体积不超过一个批次预算。
+    if (batch.length && batchBytes + data.length > BATCH_BYTES) await flushBatch();
     batch.push({
       path,
       data: bytesToBase64(data),
       mode: mode & 0o111 ? "100755" : "100644",
     });
     batchBytes += data.length;
-    if (batchBytes >= BATCH_BYTES) await flushBatch();
+    if (batchBytes >= BATCH_BYTES || batch.length >= BATCH_FILES)
+      await flushBatch();
   };
 
   const drain = async () => {
@@ -188,7 +199,9 @@ async function readTar(resp: Response, sink: SyncBatchSink): Promise<number> {
           full.includes("\r")
         )
           fail(400, "归档路径不安全");
-        await pushFile(full, job.mode, join(job.parts));
+        const content = join(job.parts);
+        job.parts.length = 0;
+        await pushFile(full, job.mode, content);
         continue;
       }
       if (buf.length < 512) return;
@@ -230,8 +243,7 @@ async function readTar(resp: Response, sink: SyncBatchSink): Promise<number> {
       if (value?.length) {
         buf = buf.length ? join([buf, value]) : value;
       }
-      await drain();
-      if (done) break;
+      await drain();      if (done) break;
     }
     await flushBatch();
   } catch (e) {

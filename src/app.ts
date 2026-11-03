@@ -686,13 +686,16 @@ app.post("/api/repos/:namespace/:repo/sync", async (c) => {
       name: u.username,
       email: u.username + "@users.zq-cfgit.local",
     };
+  let first = true;
   const snap = await streamGithubSnapshot(b.source, async (files) => {
+    const append = !first;
+    first = false;
     await engineJSON(c, r, "/import-files", {
       target_branch: r.default_branch,
       commit_message: "Sync from GitHub " + b.source,
       author,
       files,
-      append: true,
+      append,
       final: false,
     });
   });
