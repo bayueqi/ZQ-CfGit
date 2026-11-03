@@ -353,12 +353,12 @@ export class ObjectStore {
     this.indexHints.set(o.oid, { type: o.type, size: o.data.length, edges });
     this.hintEdges += edges.length;
   }
-  async flush(concurrency: 2 | 4 = 2) {
+  async flush(concurrency = 2) {
     const objects = [...this.staged.values()];
-    // Normal writes retain two lanes. Streamed imports can use four lanes under an 8 MiB batch budget.
+    // Normal writes retain two lanes. Snapshot imports widen the lanes under an object-size budget.
     for (let i = 0; i < objects.length;) {
       const batch = objects.slice(i, i + concurrency);
-      if (concurrency === 4)
+      if (concurrency > 2)
         while (
           batch.length > 1 &&
           batch.reduce((sum, o) => sum + o.data.length, 0) > LIMITS.object
@@ -400,6 +400,15 @@ export class ObjectStore {
       );
       i += batch.length;
     }
+  }
+  /** Move in-memory hints into the durable index so later requests skip re-reading objects. */
+  flushHints() {
+    if (!this.index || !this.indexHints.size) return;
+    this.index.recordMany(
+      [...this.indexHints].map(([oid, hint]) => ({ oid, hint })),
+    );
+    this.indexHints.clear();
+    this.hintEdges = 0;
   }
   async validateClosure(roots: string[]) {
     if (!this.index) {

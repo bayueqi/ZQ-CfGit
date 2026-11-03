@@ -8,7 +8,7 @@ import { passwordProof } from "./account";
 import { repositoryRole } from "./access";
 import { base64, unbase64 } from "./git/signatures";
 import { registerForgeRoutes } from "./forge-routes";
-import { fetchGithubSnapshot } from "./github-sync";
+import { streamGithubSnapshot } from "./github-sync";
 import { Hono, type Context } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
@@ -681,16 +681,28 @@ app.post("/api/repos/:namespace/:repo/sync", async (c) => {
     c,
     z.object({ source: z.string().trim().min(1).max(500) }),
   );
-  const snap = await fetchGithubSnapshot(b.source);
-  const u = requireUser(c);
+  const u = requireUser(c),
+    author = {
+      name: u.username,
+      email: u.username + "@users.zq-cfgit.local",
+    };
+  const snap = await streamGithubSnapshot(b.source, async (files) => {
+    await engineJSON(c, r, "/import-files", {
+      target_branch: r.default_branch,
+      commit_message: "Sync from GitHub " + b.source,
+      author,
+      files,
+      append: true,
+      final: false,
+    });
+  });
   const result = await engineJSON(c, r, "/import-files", {
     target_branch: r.default_branch,
     commit_message: `Sync from GitHub ${snap.owner}/${snap.name}@${snap.branch}`,
-    author: {
-      name: u.username,
-      email: u.username + "@users.zq-cfgit.local",
-    },
-    files: snap.files,
+    author,
+    files: [],
+    append: true,
+    final: true,
   });
   await c.env.DB.prepare("UPDATE repositories SET base_repo=? WHERE id=?")
     .bind(`${snap.owner}/${snap.name}`, r.id)
@@ -699,7 +711,7 @@ app.post("/api/repos/:namespace/:repo/sync", async (c) => {
     ...result,
     source: `${snap.owner}/${snap.name}`,
     branch: snap.branch,
-    files: snap.files.length,
+    files: snap.files,
   });
 });
 app.put("/api/repos/:namespace/:repo/lifecycle", async (c) => {

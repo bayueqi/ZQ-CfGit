@@ -79,6 +79,27 @@ export class GitObjectIndex {
       );
     });
   }
+  /** Batch variant of put: one transaction per flush instead of one per object. */
+  recordMany(rows: { oid: string; hint: PersistedObjectHint }[]) {
+    if (!rows.length) return;
+    this.storage.transactionSync(() => {
+      for (const { oid, hint } of rows) {
+        for (let start = 0; start < hint.edges.length; start += 256)
+          this.sql.exec(
+            "INSERT INTO git_edges_v1(parent,position,child,type) SELECT ?,CAST(key AS INTEGER)+?,json_extract(value,'$.oid'),json_extract(value,'$.type') FROM json_each(?)",
+            oid,
+            start,
+            JSON.stringify(hint.edges.slice(start, start + 256)),
+          );
+        this.sql.exec(
+          "INSERT OR REPLACE INTO git_objects_v1(oid,type,size) VALUES(?,?,?)",
+          oid,
+          hint.type,
+          hint.size,
+        );
+      }
+    });
+  }
   async ensure(
     roots: string[],
     load: (oid: string) => Promise<GitObject>,

@@ -1,9 +1,12 @@
+import { HTTPException } from "hono/http-exception";
 import { fail } from "./security";
 
-/** 单文件与仓库总量的保守上限（base64 后仍须落在 body 上限内）。 */
-const MAX_FILE = 8 * 1024 * 1024;
-const MAX_TOTAL = 20 * 1024 * 1024;
+/** 单文件与仓库总量上限，均为解压后的原始字节。 */
+const MAX_FILE = 24 * 1024 * 1024;
+const MAX_TOTAL = 60 * 1024 * 1024;
 const MAX_FILES = 3000;
+/** 每个批次向上游发送的原始字节数，用于把常驻内存压在一个固定水位。 */
+const BATCH_BYTES = 6 * 1024 * 1024;
 
 export interface SyncFile {
   path: string;
@@ -11,12 +14,14 @@ export interface SyncFile {
   mode: string;
 }
 
-export interface GithubSnapshot {
+export interface GithubSnapshotInfo {
   owner: string;
   name: string;
   branch: string;
-  files: SyncFile[];
+  files: number;
 }
+
+export type SyncBatchSink = (files: SyncFile[]) => Promise<void>;
 
 function cstr(data: Uint8Array): string {
   const end = data.indexOf(0);
@@ -28,6 +33,19 @@ function bytesToBase64(data: Uint8Array): string {
   for (let i = 0; i < data.length; i += 0x8000)
     bin += String.fromCharCode(...data.subarray(i, i + 0x8000));
   return btoa(bin);
+}
+
+function join(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
+  if (parts.length === 1) return parts[0] as Uint8Array<ArrayBuffer>;
+  let total = 0;
+  for (const p of parts) total += p.length;
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  return out;
 }
 
 function parseSource(source: string): { owner: string; name: string } {
@@ -46,66 +64,7 @@ function parseSource(source: string): { owner: string; name: string } {
   return { owner, name };
 }
 
-function parseTar(data: Uint8Array): SyncFile[] {
-  const files: SyncFile[] = [];
-  let pos = 0,
-    paxPath: string | undefined,
-    total = 0;
-  const strip = (n: string) => {
-    const i = n.indexOf("/");
-    return i < 0 ? n : n.slice(i + 1);
-  };
-  while (pos + 512 <= data.length) {
-    const header = data.subarray(pos, pos + 512);
-    if (header.every((b) => b === 0)) break;
-    const name = cstr(header.subarray(0, 100)),
-      size = parseInt(cstr(header.subarray(124, 136)).trim() || "0", 8),
-      mode = parseInt(cstr(header.subarray(100, 108)).trim() || "0", 8),
-      type = header[156],
-      prefix = cstr(header.subarray(345, 500));
-    let full = prefix ? prefix + "/" + name : name;
-    const content = data.subarray(pos + 512, pos + 512 + size);
-    pos += 512 + Math.ceil(size / 512) * 512;
-    if (!Number.isSafeInteger(size) || size < 0 || pos > data.length)
-      fail(400, "归档数据损坏");
-    if (type === 120 || type === 103) {
-      for (const line of new TextDecoder().decode(content).split("\n")) {
-        const m = line.match(/^\d+ path=(.*)$/);
-        if (m) paxPath = m[1];
-      }
-      continue;
-    }
-    if (paxPath) {
-      full = paxPath;
-      paxPath = undefined;
-    }
-    full = strip(full);
-    if (!full) continue;
-    if (
-      full.split("/").includes("..") ||
-      full.startsWith("/") ||
-      full.includes("\0") ||
-      full.includes("\r")
-    )
-      fail(400, "归档路径不安全");
-    if (type === 53) continue;
-    if (type !== 0 && type !== 48) continue;
-    if (size > MAX_FILE) fail(413, "文件过大：" + full);
-    total += size;
-    if (total > MAX_TOTAL) fail(413, "仓库过大，无法一次性同步");
-    if (files.length >= MAX_FILES) fail(413, "文件数量过多，无法一次性同步");
-    files.push({
-      path: full,
-      data: bytesToBase64(content),
-      mode: mode & 0o111 ? "100755" : "100644",
-    });
-  }
-  return files;
-}
-
-export async function fetchGithubSnapshot(source: string): Promise<GithubSnapshot> {
-  const { owner, name } = parseSource(source);
-  let branch = "main";
+async function defaultBranch(owner: string, name: string): Promise<string> {
   try {
     const meta = await fetch(`https://api.github.com/repos/${owner}/${name}`, {
       headers: {
@@ -115,16 +74,185 @@ export async function fetchGithubSnapshot(source: string): Promise<GithubSnapsho
     });
     if (meta.ok) {
       const info = (await meta.json()) as { default_branch?: string };
-      if (info.default_branch) branch = info.default_branch;
+      if (info.default_branch) return info.default_branch;
     }
   } catch {
     /* 查询默认分支失败则回退 main */
   }
-  const candidates = [branch, "main", "master"].filter(
+  return "main";
+}
+
+type Pending = {
+  kind: "file" | "pax" | "skip";
+  path: string;
+  mode: number;
+  /** 含 512 对齐填充的总字节数 */
+  remaining: number;
+  /** 有效内容字节数 */
+  content: number;
+  got: number;
+  parts: Uint8Array[];
+};
+
+const strip = (n: string) => {
+  const i = n.indexOf("/");
+  return i < 0 ? n : n.slice(i + 1);
+};
+
+/**
+ * 流式解析归档：解压、拆包、分批交出去，任何时刻只保留一个批次和当前文件。
+ * 返回文件总数。
+ */
+async function readTar(resp: Response, sink: SyncBatchSink): Promise<number> {
+  if (!resp.body) fail(503, "GitHub 未返回归档内容");
+  let reader: ReadableStreamDefaultReader<Uint8Array>;
+  try {
+    reader = resp.body
+      .pipeThrough(new DecompressionStream("gzip"))
+      .getReader();
+  } catch {
+    fail(503, "解压 GitHub 归档失败");
+  }
+  let buf: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
+  let batch: SyncFile[] = [];
+  let batchBytes = 0;
+  let total = 0,
+    count = 0;
+  let paxPath: string | undefined;
+  let pending: Pending | null = null;
+
+  const flushBatch = async () => {
+    if (!batch.length) return;
+    const out = batch;
+    batch = [];
+    batchBytes = 0;
+    await sink(out);
+  };
+
+  const pushFile = async (path: string, mode: number, data: Uint8Array) => {
+    total += data.length;
+    if (total > MAX_TOTAL)
+      fail(413, `仓库解压后超过 ${MAX_TOTAL / 1048576} MB，请改用 git push 同步`);
+    count++;
+    if (count > MAX_FILES) fail(413, "文件数量过多，无法一次性同步");
+    batch.push({
+      path,
+      data: bytesToBase64(data),
+      mode: mode & 0o111 ? "100755" : "100644",
+    });
+    batchBytes += data.length;
+    if (batchBytes >= BATCH_BYTES) await flushBatch();
+  };
+
+  const drain = async () => {
+    for (;;) {
+      if (pending) {
+        if (pending.remaining > 0) {
+          if (!buf.length) return;
+          const take = Math.min(pending.remaining, buf.length),
+            contentTake = Math.min(take, pending.content - pending.got);
+          if (contentTake > 0) {
+            pending.parts.push(buf.subarray(0, contentTake));
+            pending.got += contentTake;
+          }
+          buf = buf.subarray(take);
+          pending.remaining -= take;
+          continue;
+        }
+        const job = pending;
+        pending = null;
+        if (job.kind === "pax") {
+          for (const line of new TextDecoder()
+            .decode(join(job.parts))
+            .split("\n")) {
+            const m = line.match(/^\d+ path=(.*)$/);
+            if (m) paxPath = m[1];
+          }
+          continue;
+        }
+        if (job.kind === "skip") {
+          paxPath = undefined;
+          continue;
+        }
+        let full = job.path;
+        if (paxPath) {
+          full = paxPath;
+          paxPath = undefined;
+        }
+        full = strip(full);
+        if (!full) continue;
+        if (
+          full.split("/").includes("..") ||
+          full.startsWith("/") ||
+          full.includes("\0") ||
+          full.includes("\r")
+        )
+          fail(400, "归档路径不安全");
+        await pushFile(full, job.mode, join(job.parts));
+        continue;
+      }
+      if (buf.length < 512) return;
+      const header = buf.subarray(0, 512);
+      buf = buf.subarray(512);
+      if (header.every((b) => b === 0)) return;
+      const hname = cstr(header.subarray(0, 100));
+      const mode = parseInt(cstr(header.subarray(100, 108)).trim() || "0", 8);
+      const size = parseInt(cstr(header.subarray(124, 136)).trim() || "0", 8);
+      const type = header[156];
+      const prefix = cstr(header.subarray(345, 500));
+      const full = prefix ? prefix + "/" + hname : hname;
+      if (!Number.isSafeInteger(size) || size < 0) fail(400, "归档数据损坏");
+      if (size > MAX_FILE)
+        fail(
+          413,
+          `文件过大：${full}（${(size / 1048576).toFixed(1)} MB，上限 ${MAX_FILE / 1048576} MB）`,
+        );
+      pending = {
+        kind:
+          type === 120 || type === 103
+            ? "pax"
+            : type === 0 || type === 48
+              ? "file"
+              : "skip",
+        path: full,
+        mode,
+        remaining: Math.ceil(size / 512) * 512,
+        content: size,
+        got: 0,
+        parts: [],
+      };
+    }
+  };
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (value?.length) {
+        buf = buf.length ? join([buf, value]) : value;
+      }
+      await drain();
+      if (done) break;
+    }
+    await flushBatch();
+  } catch (e) {
+    if (e instanceof HTTPException) throw e;
+    fail(503, "解压 GitHub 归档失败");
+  }
+  return count;
+}
+
+/** 下载并流式解析 GitHub 仓库快照，每累计一个批次调用一次 sink。 */
+export async function streamGithubSnapshot(
+  source: string,
+  sink: SyncBatchSink,
+): Promise<GithubSnapshotInfo> {
+  const { owner, name } = parseSource(source);
+  const wanted = await defaultBranch(owner, name);
+  const candidates = [wanted, "main", "master"].filter(
     (b, i, a) => a.indexOf(b) === i,
   );
   let resp: Response | null = null,
-    used = "main";
+    used = wanted;
   for (const b of candidates) {
     const r = await fetch(
       `https://codeload.github.com/${owner}/${name}/tar.gz/refs/heads/${b}`,
@@ -136,16 +264,8 @@ export async function fetchGithubSnapshot(source: string): Promise<GithubSnapsho
       break;
     }
   }
-  if (!resp)
-    fail(404, "无法从 GitHub 下载该仓库（可能不存在或非公开）");
-  let raw: Uint8Array;
-  try {
-    const stream = resp.body!.pipeThrough(new DecompressionStream("gzip"));
-    raw = new Uint8Array(await new Response(stream).arrayBuffer());
-  } catch {
-    fail(503, "解压 GitHub 归档失败");
-  }
-  const files = parseTar(raw);
-  if (!files.length) fail(400, "该 GitHub 仓库没有可同步的文件");
+  if (!resp) fail(404, "无法从 GitHub 下载该仓库（可能不存在或非公开）");
+  const files = await readTar(resp, sink);
+  if (!files) fail(400, "该 GitHub 仓库没有可同步的文件");
   return { owner, name, branch: used, files };
 }

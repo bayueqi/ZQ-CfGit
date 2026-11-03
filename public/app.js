@@ -72,7 +72,21 @@ async function api(path, options = {}) {
       },
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
-    const data = await r.json();
+    const text = await r.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      const error = new Error(
+        [504, 524].includes(r.status)
+          ? i18nText("操作超时，请稍后刷新确认结果")
+          : r.status >= 500
+            ? i18nText("服务暂时不可用，请稍后重试")
+            : i18nText("请求失败") + "（HTTP " + r.status + "）",
+      );
+      error.status = r.status;
+      throw error;
+    }
     if (!r.ok) {
       if ([401, 403, 404].includes(r.status)) repositoryMetadata.clear();
       const error = new Error(

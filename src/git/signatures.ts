@@ -1,12 +1,16 @@
 import { fail } from "../security";
 export { base64 } from "../base64";
 export function unbase64(value: string) {
-  if (
-    value.length > 24 * 1024 * 1024 ||
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-      value,
-    )
-  )
+  // atob validates the alphabet and padding itself; a regex over multi-megabyte
+  // strings overflows the stack in workerd.
+  if (value.length > 24 * 1024 * 1024) fail(400, "Invalid base64");
+  let bin: string;
+  try {
+    bin = atob(value);
+  } catch {
     fail(400, "Invalid base64");
-  return Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
+  }
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }

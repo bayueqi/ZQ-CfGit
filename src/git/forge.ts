@@ -275,37 +275,76 @@ export class ForgeRepository extends GitRepository {
       ),
     );
   }
+  /**
+   * Snapshot import. Batches stage blobs and flush them to storage; the final call
+   * builds the tree and publishes. Only one batch of file bodies is resident at a time.
+   */
   async replaceSnapshot(b: {
     target_branch: string;
     commit_message: string;
     author: SignatureIdentity;
     committer?: SignatureIdentity;
     files: { path: string; data: string; mode?: string }[];
+    append?: boolean;
+    final?: boolean;
   }) {
     this.branch(b.target_branch);
     const ref = "refs/heads/" + b.target_branch,
       old = this.refs[ref] || null;
-    if (!Array.isArray(b.files) || !b.files.length)
+    if (!Array.isArray(b.files)) fail(400, "Invalid file list");
+    const incremental = b.append === true;
+    if (!incremental && !b.files.length)
       fail(400, "Sync requires at least one file");
-    const entries = new Map<string, TreeEntry>();
+    const staged: { path: string; sha: string; mode: string }[] = incremental
+      ? ((await this.storage.get<{ path: string; sha: string; mode: string }[]>(
+          "import:pending",
+        )) ?? [])
+      : [];
+    const seen = new Set(staged.map((e) => e.path));
     for (const f of b.files) {
       this.path(f.path);
-      if (entries.has(f.path)) fail(400, "Duplicate path: " + f.path);
-      const mode =
-        f.mode && ["100644", "100755", "120000"].includes(f.mode)
-          ? f.mode
-          : "100644";
-      const sha = (await this.store.create("blob", unbase64(f.data))).oid;
-      entries.set(f.path, {
-        name: f.path.split("/").at(-1)!,
-        mode,
-        type: "blob",
-        sha,
+      if (seen.has(f.path)) fail(400, "Duplicate path: " + f.path);
+      seen.add(f.path);
+    }
+    for (let i = 0; i < b.files.length; i += 8) {
+      const slice = b.files.slice(i, i + 8),
+        objects = await Promise.all(
+          slice.map((f) => this.store.create("blob", unbase64(f.data))),
+        );
+      objects.forEach((o, j) => {
+        const f = slice[j];
+        staged.push({
+          path: f.path,
+          sha: o.oid,
+          mode:
+            f.mode && ["100644", "100755", "120000"].includes(f.mode)
+              ? f.mode
+              : "100644",
+        });
       });
     }
+    await this.store.flush(16);
+    this.store.flushHints();
+    if (b.final === false) {
+      await this.storage.put("import:pending", staged);
+      return {
+        staged: staged.length,
+        blob_count: 0,
+        target_branch: b.target_branch,
+      };
+    }
+    const entries = new Map<string, TreeEntry>();
+    for (const e of staged)
+      entries.set(e.path, {
+        name: e.path.split("/").at(-1)!,
+        mode: e.mode,
+        type: "blob",
+        sha: e.sha,
+      });
     const tree = await this.buildTree(entries),
       commit = await this.writeCommit(tree, old ? [old] : [], b);
     await this.publish({ ...this.refs, [ref]: commit.oid });
+    await this.storage.put("import:pending", []);
     return {
       sha: commit.oid,
       tree_sha: tree,

@@ -319,6 +319,11 @@ export class Repository extends DurableObject<Env> {
     const publication: RefStorage = {
       get: <T>(key: string) => this.ctx.storage.get<T>(key),
       put: async (key, value) => {
+        // Snapshot import staging is repository-scoped state, not a ref publication.
+        if (key === "import:pending") {
+          await this.ctx.storage.put(key, value);
+          return;
+        }
         if (key !== "refs.v2") fail(400, "Unexpected Git state key");
         const values: Record<string, unknown> = { "refs.v2": value as Refs };
         await this.ctx.storage.setAlarm(Date.now() + 1000);

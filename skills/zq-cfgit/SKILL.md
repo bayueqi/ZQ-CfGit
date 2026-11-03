@@ -58,7 +58,7 @@ curl -s -X POST "<站点>/api/repos/<用户名>/MyRepo/sync" \
 
 - `source` 填 `owner/name`，也可带 `https://github.com/` 前缀或 `.git` 后缀，服务会解析。
 - 只同步默认分支的最新快照，覆盖本仓库内容，不保留 commit 历史、issue、PR。
-- 单文件 ≤ 8 MiB、总量 ≤ 20 MiB、≤ 3000 个文件；GitHub 仓库须公开。
+- 单文件 ≤ 24 MiB、总量 ≤ 60 MiB、≤ 3000 个文件；GitHub 仓库须公开。
 - 默认分支走 api.github.com 查询，下载走 codeload.github.com；`main` 不存在时回退 `master`。
 
 ### 重命名
