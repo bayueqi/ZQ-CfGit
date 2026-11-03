@@ -84,7 +84,10 @@ export class SnapshotStore extends ObjectStore {
         put: async () => {
           throw new Error("Snapshot attempted object publication");
         },
-      } as Pick<R2Bucket, "get" | "put">,
+        delete: async () => {
+          throw new Error("Snapshot attempted object deletion");
+        },
+      } as Pick<R2Bucket, "get" | "put" | "delete">,
       shared && {
         get: (repo, oid) => shared.get(repo, oid, SNAPSHOT_LIMITS.object),
         put: (repo, object) => shared.put(repo, object),

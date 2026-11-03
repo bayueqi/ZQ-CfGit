@@ -6,14 +6,8 @@ import { projectDatabase } from "./project-db";
 import { archivedApiWrite, archiveError } from "./project-state";
 import { passwordProof } from "./account";
 import { repositoryRole } from "./access";
-import { sha1Parts } from "./git/objects";
 import { base64, unbase64 } from "./git/signatures";
 import { registerForgeRoutes } from "./forge-routes";
-import {
-  streamGithubSnapshot,
-  bytesToBase64,
-  type SyncFile,
-} from "./github-sync";
 import { Hono, type Context } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
@@ -33,6 +27,7 @@ import {
   boundedBody,
 } from "./security";
 const app = new Hono<App>();
+const PERMANENT_EXPIRY = Date.UTC(9999, 11, 31);
 const userInput = z.object({
   username: slug,
   password: z.string().min(12).max(128),
@@ -196,10 +191,11 @@ app.use("*", async (c, next) => {
   c.header("X-Content-Type-Options", "nosniff");
   c.header("Referrer-Policy", "same-origin");
   c.header("X-Frame-Options", "DENY");
-  c.header(
-    "Content-Security-Policy",
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
-  );
+  if (!c.res.headers.has("Content-Security-Policy"))
+    c.header(
+      "Content-Security-Policy",
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    );
   if (!c.res.headers.has("Cache-Control"))
     c.header("Cache-Control", "no-store");
 });
@@ -506,7 +502,7 @@ app.post("/api/tokens", async (c) => {
     z.object({
       name: z.string().trim().min(1).max(80),
       scope: z.enum(["read", "write"]).default("write"),
-      days: z.number().int().min(1).max(365).default(90),
+      days: z.number().int().min(0).max(365).default(90),
     }),
   );
   const snapshot = await c.env.DB.prepare(
@@ -526,7 +522,7 @@ app.post("/api/tokens", async (c) => {
       u.id,
       b.name,
       b.scope,
-      Date.now() + b.days * 86400000,
+      b.days ? Date.now() + b.days * 86400000 : PERMANENT_EXPIRY,
       u.id,
       snapshot.auth_epoch,
       c.get("credential"),
@@ -690,83 +686,21 @@ app.post("/api/repos/:namespace/:repo/sync", async (c) => {
     c,
     z.object({ source: z.string().trim().min(1).max(500) }),
   );
-  const u = requireUser(c),
-    author = {
+  const u = requireUser(c);
+  // 归档下载、解包与对象落库都在 Durable Object 内完成，主 Worker 只做一次转发，
+  // 避免大仓库把脚本执行时间耗在解包和转码上。
+  const snap: any = await engineJSON(c, r, "/sync-github", {
+    source: b.source,
+    target_branch: r.default_branch,
+    author: {
       name: u.username,
       email: u.username + "@users.zq-cfgit.local",
-    };
-  // 每次同步使用独立的暂存命名空间，避免上一轮超时留下的列表污染本轮
-  const token = crypto.randomUUID();
-  let appended = false;
-  const sendBatch = async (files: SyncFile[]) => {
-    await engineJSON(c, r, "/import-files", {
-      target_branch: r.default_branch,
-      commit_message: "Sync from GitHub " + b.source,
-      author,
-      files: files.map((f) => ({
-        path: f.path,
-        data: bytesToBase64(f.data),
-        mode: f.mode,
-      })),
-      append: appended,
-      final: false,
-      token,
-    });
-    appended = true;
-  };
-  const sendLarge = async (file: SyncFile) => {
-    // 大文件由主 Worker 直接写入 R2，避免 DO 常驻实例反复持有几十 MB 数据；
-    // 分段算 ID、Blob 拼接口，都不再复制整份文件。
-    const header = new TextEncoder().encode(`blob ${file.data.length}\0`),
-      payload = new Uint8Array(header.length + file.data.length);
-    payload.set(header);
-    payload.set(file.data, header.length);
-    const oid = sha1Parts([payload]);
-    await c.env.OBJECTS.put(`repos/${r.id}/objects/${oid}`, payload, {
-      onlyIf: { etagDoesNotMatch: "*" },
-      httpMetadata: { contentType: "application/octet-stream" },
-    });
-    await engineJSON(c, r, "/import-blob-ref", {
-      path: file.path,
-      mode: file.mode,
-      oid,
-      size: file.data.length,
-      token,
-    });
-    appended = true;
-  };
-  const snap = await streamGithubSnapshot(b.source, async (files) => {
-    const small: SyncFile[] = [];
-    for (const file of files) {
-      // 大文件单独二进制直传，避免 base64 把内存峰值放大到三四倍
-      if (file.data.length <= 1024 * 1024) {
-        small.push(file);
-        continue;
-      }
-      if (small.length) await sendBatch(small.splice(0));
-      await sendLarge(file);
-    }
-    if (small.length) await sendBatch(small);
-  });
-  const result = await engineJSON(c, r, "/import-files", {
-    target_branch: r.default_branch,
-    commit_message: `Sync from GitHub ${snap.owner}/${snap.name}@${snap.branch}`,
-    author,
-    files: [],
-    append: true,
-    final: true,
-    token,
+    },
   });
   await c.env.DB.prepare("UPDATE repositories SET base_repo=? WHERE id=?")
-    .bind(`${snap.owner}/${snap.name}`, r.id)
+    .bind(snap.source, r.id)
     .run();
-  return c.json({
-    ...result,
-    source: `${snap.owner}/${snap.name}`,
-    branch: snap.branch,
-    files: snap.files,
-    skipped: snap.skipped,
-  });
+  return c.json(snap);
 });
 app.put("/api/repos/:namespace/:repo/lifecycle", async (c) => {
   const r = await repoAccess(c, "maintain");
@@ -830,26 +764,38 @@ app.get("/api/repos/:namespace/:repo/preview", async (c) => {
   if (!response.ok) return response;
   const bytes = await boundedBody(response, 24 * 1024 * 1024),
     is = (start: number, values: number[]) =>
-      values.every((x, i) => bytes[start + i] === x);
-  const mime = is(0, [137, 80, 78, 71, 13, 10, 26, 10])
-    ? "image/png"
-    : is(0, [255, 216, 255])
-      ? "image/jpeg"
-      : is(0, [71, 73, 70, 56]) &&
-          (bytes[4] === 55 || bytes[4] === 57) &&
-          bytes[5] === 97
-        ? "image/gif"
-        : is(0, [82, 73, 70, 70]) && is(8, [87, 69, 66, 80])
-          ? "image/webp"
-          : null;
-  if (!mime) fail(400, "Preview supports PNG, JPEG, GIF and WebP images");
-  return new Response(bytes as BodyInit, {
-    headers: {
-      "content-type": mime,
-      "cache-control": "private, no-store",
-      "x-content-type-options": "nosniff",
-    },
-  });
+      values.every((x, i) => bytes[start + i] === x),
+    head = new TextDecoder()
+      .decode(bytes.subarray(0, 512))
+      .replace(/^\uFEFF/, "")
+      .trimStart()
+      .toLowerCase(),
+    mime = is(0, [137, 80, 78, 71, 13, 10, 26, 10])
+      ? "image/png"
+      : is(0, [255, 216, 255])
+        ? "image/jpeg"
+        : is(0, [71, 73, 70, 56]) &&
+            (bytes[4] === 55 || bytes[4] === 57) &&
+            bytes[5] === 97
+          ? "image/gif"
+          : is(0, [82, 73, 70, 70]) && is(8, [87, 69, 66, 80])
+            ? "image/webp"
+            : head.startsWith("<svg") ||
+                /^<\?xml[^>]*>\s*(<!--[\s\S]*?-->\s*)*<svg/.test(head)
+              ? "image/svg+xml"
+              : null;
+  if (!mime) fail(400, "Preview supports PNG, JPEG, GIF, WebP and SVG images");
+  const headers: Record<string, string> = {
+    "content-type": mime,
+    "cache-control": "private, no-store",
+    "x-content-type-options": "nosniff",
+  };
+  // 只有 SVG 能被当页面直接打开，加 sandbox 让其中的脚本在本站没有执行环境。
+  if (mime === "image/svg+xml") {
+    headers["content-security-policy"] = "sandbox";
+    headers["content-disposition"] = "inline";
+  }
+  return new Response(bytes as BodyInit, { headers });
 });
 registerForgeRoutes(app, { access: repoAccess, engine });
 for (const operation of [

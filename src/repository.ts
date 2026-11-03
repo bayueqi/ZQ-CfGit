@@ -38,6 +38,7 @@ import { ObjectStore, Refs, text } from "./git/objects";
 import { namespaceRepositories } from "./git/namespaces";
 import { advertise, upload } from "./git/protocol";
 import { importSnapshot } from "./git/legacy";
+import { streamGithubSnapshot } from "./github-sync";
 /** The per-repository DO serializes requests; immutable R2 objects precede atomic ref publication. */
 export class Repository extends DurableObject<Env> {
   private gate = new RequestGate();
@@ -426,6 +427,21 @@ export class Repository extends DurableObject<Env> {
       }
       return Response.json(await repo.replaceSnapshot(body), { status: 201 });
     }
+    if (request.method === "POST" && path === "/sync-github") {
+      let body;
+      try {
+        body = JSON.parse(text(await boundedBody(request, 64 * 1024)));
+      } catch (e) {
+        if (e instanceof HTTPException) throw e;
+        fail(400, "Invalid JSON");
+      }
+      try {
+        return Response.json(await importGithubSnapshot(repo, body));
+      } catch (e) {
+        if (e instanceof HTTPException) throw e;
+        fail(503, "同步失败：" + ((e as Error)?.message || "未知错误"));
+      }
+    }
     if (request.method === "POST" && path === "/import-blob-ref") {
       let ref;
       try {
@@ -492,4 +508,58 @@ export class Repository extends DurableObject<Env> {
     }
     fail(404, "Git endpoint not found");
   }
+}
+
+/**
+ * GitHub 快照同步。归档解析与对象落库都放在 Durable Object 内完成：
+ * 这里不受主 Worker 的脚本执行时间限制，文件内容也无需 base64 转码或跨服务传输。
+ */
+async function importGithubSnapshot(
+  repo: {
+    replaceSnapshot: (b: {
+      target_branch: string;
+      commit_message: string;
+      author: { name: string; email: string };
+      files: { path: string; data: string | Uint8Array; mode?: string }[];
+      append?: boolean;
+      final?: boolean;
+      token?: string;
+    }) => Promise<unknown>;
+  },
+  b: {
+    source: string;
+    target_branch: string;
+    author: { name: string; email: string };
+  },
+) {
+  const token = crypto.randomUUID();
+  let appended = false;
+  const snap = await streamGithubSnapshot(b.source, async (files) => {
+    await repo.replaceSnapshot({
+      target_branch: b.target_branch,
+      commit_message: "Sync from GitHub " + b.source,
+      author: b.author,
+      files: files.map((f) => ({ path: f.path, data: f.data, mode: f.mode })),
+      append: appended,
+      final: false,
+      token,
+    });
+    appended = true;
+  });
+  const result = await repo.replaceSnapshot({
+    target_branch: b.target_branch,
+    commit_message: `Sync from GitHub ${snap.owner}/${snap.name}@${snap.branch}`,
+    author: b.author,
+    files: [],
+    append: true,
+    final: true,
+    token,
+  });
+  return {
+    ...(result as Record<string, unknown>),
+    source: `${snap.owner}/${snap.name}`,
+    branch: snap.branch,
+    files: snap.files,
+    skipped: snap.skipped,
+  };
 }

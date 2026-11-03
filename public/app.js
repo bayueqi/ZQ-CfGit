@@ -5,7 +5,7 @@ import {
   errorText,
   relativeTime,
 } from "./i18n.js?v=8502f51a9d3cb3ce";
-import { forgePage } from "./forge.js?v=82174bb10a6360e7";
+import { forgePage } from "./forge.js?v=87354765390068ea";
 const root = document.querySelector("#app");
 const esc = (x) =>
   String(x ?? "").replace(
@@ -200,7 +200,7 @@ async function applyMarkdown(context = {}) {
     (el) => !el.dataset.rendered,
   );
   if (!targets.length) return;
-  const { renderMarkdown } = await import("./markdown.js?v=5c1e11be8f51b2f5");
+  const { renderMarkdown } = await import("./markdown.js?v=244f1fb8c2b15f97");
   for (const el of targets) {
     if (!el.isConnected) continue;
     const raw = el.textContent;
@@ -746,7 +746,7 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
   if (notebook) {
     try {
       const { mountNotebook } =
-        await import("./notebook.js?v=55cd875ba22bef16");
+        await import("./notebook.js?v=9036962ba7ad7a6f");
       if (version !== routeVersion || !notebook.isConnected) return;
       mountNotebook(notebook, data.content, { base, ref: data.ref, path: p });
     } catch {
@@ -988,7 +988,7 @@ async function commitPage(r, base, ap, version, sha) {
   repoLayout(
     r,
     "commits",
-    i18nHTML`<div class="panel"><div class="panelhead"><strong>${esc(title)}</strong><code>${esc(commit.sha.slice(0, 8))}</code></div><p class="muted" style="padding:0 16px;margin:14px 0 0">${esc(commit.author_name)} 提交于 ${date(commit.date)}${commit.parent_shas?.length ? " · 父提交 " + commit.parent_shas.map((p) => link(base + "/commits/" + p, p.slice(0, 8))).join(", ") : ""}</p>${body ? `<pre style="padding:0 16px 16px">${esc(body)}</pre>` : '<div style="height:14px"></div>'}</div><div class="panel"><div class="panelhead"><strong>变更</strong><span class="muted">${diff.stats.files} 个文件 · +${diff.stats.additions} −${diff.stats.deletions}</span></div>${diff.files.length ? diff.files.map((f) => `<div class="panelhead" style="border-top:1px solid var(--line)"><span class="pill">${esc(statusText[f.status] || f.status)}</span><code>${esc(f.path)}</code></div>${f.binary ? '<p class="muted" style="padding:0 16px 16px">二进制文件</p>' : `<div class="review-diff">${diffRows(f.patch)}</div>`}`).join("") : '<div class="empty"><p>无文件变更</p></div>'}</div>`,
+    i18nHTML`<div class="panel"><div class="panelhead"><strong>${esc(title)}</strong><code>${esc(commit.sha.slice(0, 8))}</code></div><p class="muted" style="padding:0 16px;margin:14px 0 0">${esc(commit.author_name)} 提交于 ${date(commit.date)}${commit.parent_shas?.length ? " · 父提交 " + commit.parent_shas.map((p) => link(base + "/commits/" + p, p.slice(0, 8))).join(", ") : ""}</p>${body ? `<pre style="padding:0 16px 16px">${esc(body)}</pre>` : '<div style="height:14px"></div>'}</div><div class="panel"><div class="panelhead"><strong>变更</strong><span class="muted">${diff.stats.files} 个文件 · +${diff.stats.additions} −${diff.stats.deletions}${diff.truncated ? "（变更过多，仅列清单）" : ""}</span></div>${diff.files.length ? diff.files.map((f) => `<div class="panelhead" style="border-top:1px solid var(--line)"><span class="pill">${esc(statusText[f.status] || f.status)}</span><code>${esc(f.path)}</code></div>${f.binary ? '<p class="muted" style="padding:0 16px 16px">二进制文件</p>' : f.patch ? `<div class="review-diff">${diffRows(f.patch)}</div>` : ''}`).join("") : '<div class="empty"><p>无文件变更</p></div>'}</div>`,
   );
 }
 async function settingsPage(r, base, ap, version) {
@@ -1057,7 +1057,7 @@ async function tokensPage(version) {
   const { tokens } = await api("/tokens");
   if (version !== routeVersion) return;
   layout(
-    i18nHTML`<div class="titlebar"><div><h1>访问令牌</h1><p class="muted">为 Git 客户端和自动化工具创建凭证。</p></div></div><div class="info">Git 通过 HTTPS 使用你的用户名和令牌认证。令牌只显示一次；可随时撤销。</div><div id="token-result"></div><div class="stack"><details class="panel"><summary class="panelhead">修改账号密码</summary><form class="form" id="change-password">${field(i18nText("当前密码"), "current_password", "password")}${field(i18nText("新密码"), "new_password", "password", "", i18nText("修改后将撤销所有会话与访问令牌，需要重新登录。"))}<button type="submit" class="btn primary">修改密码</button></form></details><div class="panel"><form class="form" id="new-token"><h2>创建令牌</h2>${field(i18nText("名称"), "name", "text", "", i18nText("例如：MacBook、CI read-only"))}<div class="inline"><div class="field"><label for="scope">权限</label><select id="scope" name="scope"><option value="write">读写 · 使用账号已有权限</option><option value="read">只读</option></select></div><div class="field"><label for="days">有效期</label><select id="days" name="days"><option value="30">30 天</option><option value="90" selected>90 天</option><option value="365">365 天</option></select></div></div><button class="btn primary" type="submit">生成令牌</button></form></div><div class="panel"><div class="panelhead"><strong>已有令牌</strong></div>${tokens.length ? tokens.map((t) => i18nHTML`<div class="token-row"><div><strong>${esc(t.name)}</strong><p class="muted">${t.scope === "read" ? i18nText("只读") : i18nText("读写")} · 到期 ${new Date(t.expires_at).toLocaleDateString(getLocale())}</p></div><button class="btn small danger" data-revoke="${t.id}">撤销</button></div>`).join("") : i18nText('<div class="empty"><p>暂无访问令牌。</p></div>')}</div></div>`,
+    i18nHTML`<div class="titlebar"><div><h1>访问令牌</h1><p class="muted">为 Git 客户端和自动化工具创建凭证。</p></div></div><div class="info">Git 通过 HTTPS 使用你的用户名和令牌认证。令牌只显示一次；可随时撤销。</div><div id="token-result"></div><div class="stack"><details class="panel"><summary class="panelhead">修改账号密码</summary><form class="form" id="change-password">${field(i18nText("当前密码"), "current_password", "password")}${field(i18nText("新密码"), "new_password", "password", "", i18nText("修改后将撤销所有会话与访问令牌，需要重新登录。"))}<button type="submit" class="btn primary">修改密码</button></form></details><div class="panel"><form class="form" id="new-token"><h2>创建令牌</h2>${field(i18nText("名称"), "name", "text", "", i18nText("例如：MacBook、CI read-only"))}<div class="inline"><div class="field"><label for="scope">权限</label><select id="scope" name="scope"><option value="write">读写 · 使用账号已有权限</option><option value="read">只读</option></select></div><div class="field"><label for="days">有效期</label><select id="days" name="days"><option value="30">30 天</option><option value="90" selected>90 天</option><option value="365">365 天</option><option value="0">永久有效</option></select></div></div><button class="btn primary" type="submit">生成令牌</button></form></div><div class="panel"><div class="panelhead"><strong>已有令牌</strong></div>${tokens.length ? tokens.map((t) => i18nHTML`<div class="token-row"><div><strong>${esc(t.name)}</strong><p class="muted">${t.scope === "read" ? i18nText("只读") : i18nText("读写")} · ${t.expires_at >= 253402214400000 ? i18nText("永久有效") : i18nText("到期") + " " + new Date(t.expires_at).toLocaleDateString(getLocale())}</p></div><button class="btn small danger" data-revoke="${t.id}">撤销</button></div>`).join("") : i18nText('<div class="empty"><p>暂无访问令牌。</p></div>')}</div></div>`,
     i18nText("访问令牌"),
     "tokens",
   );

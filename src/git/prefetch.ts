@@ -25,7 +25,7 @@ export async function* prefetchObjects(
         size = expected ?? LIMITS.object;
       if (!Number.isSafeInteger(size) || size < 0 || size > LIMITS.object)
         fail(409, "Invalid indexed Git object size");
-      if (reserved + size > LIMITS.cacheBytes) break;
+      if (queue.length && reserved + size > LIMITS.cacheBytes) break;
       next++;
       reserved += size;
       // Attach both handlers immediately: later failures must not become unhandled rejections.

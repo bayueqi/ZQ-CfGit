@@ -104,7 +104,7 @@ export async function parseReceivePack(
       size += (b & 127) * 2 ** shift;
       shift += 7;
     }
-    if (size > LIMITS.object) fail(413, "Pack object exceeds 8 MiB");
+    if (size > LIMITS.object) fail(413, "Pack object exceeds 60 MiB");
     if (!types[type] && type !== 6 && type !== 7)
       fail(400, "Unsupported pack object type");
     const entry: Entry = { offset, type, size };

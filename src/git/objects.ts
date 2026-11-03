@@ -7,7 +7,7 @@ import { GitIO, gitStage } from "./diagnostics";
 import type { ObjectCache } from "./object-cache";
 import { fail } from "../security";
 export const LIMITS = {
-  object: 24 * 1024 * 1024,
+  object: 60 * 1024 * 1024,
   expanded: 64 * 1024 * 1024,
   pack: 64 * 1024 * 1024,
   objects: 20000,
@@ -142,7 +142,7 @@ export async function makeObject(
   type: ObjectType,
   data: Uint8Array,
 ): Promise<GitObject> {
-  if (data.length > LIMITS.object) fail(413, "Git object exceeds 8 MiB");
+  if (data.length > LIMITS.object) fail(413, "Git object exceeds 60 MiB");
   return { oid: await sha1(canonical({ type, data })), type, data };
 }
 export async function readCanonical(
@@ -317,7 +317,7 @@ export class ObjectStore {
   private hintEdges = 0;
   constructor(
     readonly repoId: string,
-    private bucket: Pick<R2Bucket, "get" | "put">,
+    private bucket: Pick<R2Bucket, "get" | "put" | "delete">,
     private shared?: Pick<ObjectCache, "get" | "put">,
     readonly index?: GitObjectIndex,
     private io = new GitIO(undefined, (detail) =>
@@ -371,6 +371,28 @@ export class ObjectStore {
     this.peakSize = Math.max(this.peakSize, this.size);
     return o;
   }
+  /**
+   * 同步暂存清单一类的辅助数据：直接写 R2，不进对象索引，
+   * 也不受 Durable Object 单值 128 KB 的限制。
+   */
+  async readAux(name: string): Promise<Uint8Array | undefined> {
+    const stored = await this.io.run("object-read", async () => {
+      this.r2Reads++;
+      return this.bucket.get(`repos/${this.repoId}/aux/${name}`);
+    });
+    return stored ? new Uint8Array(await stored.arrayBuffer()) : undefined;
+  }
+  async writeAux(name: string, data: Uint8Array) {
+    await this.io.run("object-write", async () => {
+      this.r2Writes++;
+      return this.bucket.put(`repos/${this.repoId}/aux/${name}`, data);
+    });
+  }
+  async clearAux(name: string) {
+    await this.io.run("object-write", () =>
+      this.bucket.delete(`repos/${this.repoId}/aux/${name}`),
+    );
+  }
   async get(oid: string): Promise<GitObject> {
     if (!isOid(oid)) fail(400, "Invalid object ID");
     const existing = this.staged.get(oid) || this.cache.get(oid);
@@ -404,7 +426,7 @@ export class ObjectStore {
       fail(409, "Conflicting staged Git object");
     if (!old) {
       if (this.stagedSize + o.data.length > LIMITS.expanded)
-        fail(413, "Staged Git objects exceed 32 MiB");
+        fail(413, "Staged Git objects exceed 64 MiB");
       this.stagedSize += o.data.length;
       this.peakStaged = Math.max(this.peakStaged, this.stagedSize);
     }

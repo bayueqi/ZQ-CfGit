@@ -280,6 +280,22 @@ export class ForgeRepository extends GitRepository {
       ),
     );
   }
+  /** 暂存清单存 R2 而不是 DO storage：文件多的仓库会超过 storage 单值 128 KB 上限。 */
+  private async readStaging(key: string) {
+    const raw = await this.store.readAux(key);
+    if (!raw) return [] as { path: string; sha: string; mode: string }[];
+    try {
+      const parsed = JSON.parse(text(raw));
+      return Array.isArray(parsed)
+        ? (parsed as { path: string; sha: string; mode: string }[])
+        : [];
+    } catch {
+      fail(409, "Snapshot staging list is corrupted; retry the sync");
+    }
+  }
+  private async writeStaging(key: string, entries: unknown[]) {
+    await this.store.writeAux(key, bytes(JSON.stringify(entries)));
+  }
   /**
    * Snapshot import. Batches stage blobs and flush them to storage; the final call
    * builds the tree and publishes. Only one batch of file bodies is resident at a time.
@@ -289,7 +305,7 @@ export class ForgeRepository extends GitRepository {
     commit_message: string;
     author: SignatureIdentity;
     committer?: SignatureIdentity;
-    files: { path: string; data: string; mode?: string }[];
+    files: { path: string; data: string | Uint8Array; mode?: string }[];
     append?: boolean;
     final?: boolean;
     /** 单次同步的暂存命名空间，避免上一轮中断留下的列表污染新一轮。 */
@@ -302,11 +318,9 @@ export class ForgeRepository extends GitRepository {
     const incremental = b.append === true;
     if (!incremental && !b.files.length && b.final !== false)
       fail(400, "Sync requires at least one file");
-    const pendingKey = "import:" + (b.token || "pending");
+    const pendingKey = "import/" + (b.token || "pending") + ".json";
     const staged: { path: string; sha: string; mode: string }[] = incremental
-      ? ((await this.storage.get<{ path: string; sha: string; mode: string }[]>(
-          pendingKey,
-        )) ?? [])
+      ? await this.readStaging(pendingKey)
       : [];
     const seen = new Set(staged.map((e) => e.path));
     for (const f of b.files) {
@@ -317,7 +331,12 @@ export class ForgeRepository extends GitRepository {
     for (let i = 0; i < b.files.length; i += 8) {
       const slice = b.files.slice(i, i + 8),
         objects = await Promise.all(
-          slice.map((f) => this.store.create("blob", unbase64(f.data))),
+          slice.map((f) =>
+            this.store.create(
+              "blob",
+              typeof f.data === "string" ? unbase64(f.data) : f.data,
+            ),
+          ),
         );
       objects.forEach((o, j) => {
         const f = slice[j];
@@ -334,7 +353,7 @@ export class ForgeRepository extends GitRepository {
     await this.store.flush(16);
     this.store.flushHints();
     if (b.final === false) {
-      await this.storage.put(pendingKey, staged);
+      await this.writeStaging(pendingKey, staged);
       return {
         staged: staged.length,
         blob_count: 0,
@@ -352,7 +371,7 @@ export class ForgeRepository extends GitRepository {
     const tree = await this.buildTree(entries),
       commit = await this.writeCommit(tree, old ? [old] : [], b);
     await this.publish({ ...this.refs, [ref]: commit.oid });
-    await this.storage.put(pendingKey, []);
+    await this.store.clearAux(pendingKey);
     return {
       sha: commit.oid,
       tree_sha: tree,
@@ -369,11 +388,8 @@ export class ForgeRepository extends GitRepository {
     token?: string;
   }) {
     this.path(b.path);
-    const pendingKey = "import:" + (b.token || "pending");
-    const staged =
-      (await this.storage.get<{ path: string; sha: string; mode: string }[]>(
-        pendingKey,
-      )) ?? [];
+    const pendingKey = "import/" + (b.token || "pending") + ".json";
+    const staged = await this.readStaging(pendingKey);
     if (staged.some((e) => e.path === b.path))
       fail(400, "Duplicate path: " + b.path);
     staged.push({
@@ -381,7 +397,7 @@ export class ForgeRepository extends GitRepository {
       sha: b.oid,
       mode: ["100644", "100755", "120000"].includes(b.mode) ? b.mode : "100644",
     });
-    await this.storage.put(pendingKey, staged);
+    await this.writeStaging(pendingKey, staged);
     this.store.noteObject(b.oid, "blob", b.size);
     this.store.flushHints();
     return { staged: staged.length, oid: b.oid };
@@ -536,11 +552,44 @@ export class ForgeRepository extends GitRepository {
     const context = options.context ?? 3;
     if (!Number.isInteger(context) || context < 0 || context > 100)
       fail(400, "Invalid diff context");
-    for (const path of [...new Set([...a.keys(), ...b.keys()])].sort()) {
-      if (!pathFilter(path, { paths: options.paths })) continue;
+    const changed = [...new Set([...a.keys(), ...b.keys()])]
+      .sort()
+      .filter((path) => pathFilter(path, { paths: options.paths }))
+      .filter((path) => {
+        const old = a.get(path),
+          next = b.get(path);
+        return !(old?.sha === next?.sha && old?.mode === next?.mode);
+      });
+    // 一次性导入（无父提交）或超大变更会读全部对象、逐文件生成补丁，
+    // 把子请求与 CPU 预算耗尽、请求挂死。超过预算时只列文件清单，秒回。
+    if (changed.length > 200) {
+      for (const path of changed) {
+        const old = a.get(path),
+          next = b.get(path);
+        result.push({
+          path,
+          status: !old ? "added" : !next ? "deleted" : "modified",
+          old_sha: old?.sha || null,
+          new_sha: next?.sha || null,
+          old_mode: old?.mode || null,
+          new_mode: next?.mode || null,
+          binary: false,
+          patch: "",
+        });
+      }
+      return {
+        source_sha: src,
+        target_sha: base || null,
+        diff: "",
+        patch: "",
+        files: result,
+        truncated: true,
+        stats: { files: result.length, additions: 0, deletions: 0 },
+      };
+    }
+    for (const path of changed) {
       const old = a.get(path),
         next = b.get(path);
-      if (old?.sha === next?.sha && old?.mode === next?.mode) continue;
       const left =
           old?.type === "blob"
             ? (await this.store.get(old.sha)).data

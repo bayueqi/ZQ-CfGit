@@ -21,7 +21,7 @@ export async function* packChunks(
   let emitted = 12;
   for await (const object of prefetchObjects(ids, load, prefetch)) {
     let size = object.data.length;
-    if (size > LIMITS.object) fail(413, "Git object exceeds 8 MiB");
+    if (size > LIMITS.object) fail(413, "Git object exceeds 60 MiB");
     const type = { commit: 1, tree: 2, blob: 3, tag: 4 }[object.type],
       entry = [];
     let first = (type << 4) | (size & 15);

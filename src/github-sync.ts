@@ -4,7 +4,16 @@ import { fail } from "./security";
 /** 单文件与仓库总量上限，均为解压后的原始字节。 */
 const MAX_FILE = 12 * 1024 * 1024;
 const MAX_TOTAL = 64 * 1024 * 1024;
-const MAX_FILES = 3000;
+/**
+ * 文件数上限。一次同步在单个请求内完成，解析与落库都占用脚本执行时间，
+ * 超出后请求会因运行时限制中断，因此在下载归档之前先用 GitHub 的树列表预检。
+ */
+const MAX_FILES = 600;
+/**
+ * 每个文件缓冲前预留的字节数。git 对象内容为 `blob <len>\0` 加正文，
+ * 预留头部后可以在原缓冲上就地拼接，交付出去的视图不必再复制一份正文。
+ */
+export const BLOB_HEADER_RESERVE = 32;
 /** 每个批次的原始字节与文件数上限，避免单个请求内的存储调用超过运行时配额。 */
 const BATCH_BYTES = 4 * 1024 * 1024;
 const BATCH_FILES = 200;
@@ -31,9 +40,10 @@ export interface GithubSnapshotInfo {
 
 export type SyncBatchSink = (files: SyncFile[]) => Promise<void>;
 
+const textDecoder = new TextDecoder();
 function cstr(data: Uint8Array): string {
   const end = data.indexOf(0);
-  return new TextDecoder().decode(end < 0 ? data : data.subarray(0, end));
+  return textDecoder.decode(end < 0 ? data : data.subarray(0, end));
 }
 
 export function bytesToBase64(data: Uint8Array): string {
@@ -182,7 +192,11 @@ async function readTar(
     if (total > MAX_TOTAL)
       fail(413, `仓库解压后超过 ${MAX_TOTAL / 1048576} MB，请改用 git push 同步`);
     count++;
-    if (count > MAX_FILES) fail(413, "文件数量过多，无法一次性同步");
+    if (count > MAX_FILES)
+      fail(
+        413,
+        `仓库超过 ${MAX_FILES} 个文件，请改用 git push 同步`,
+      );
     // 大文件不与现有批次合并，保证单次请求的体积不超过一个批次预算。
     if (batch.length && batchBytes + data.length > BATCH_BYTES) await flushBatch();
     batch.push({
@@ -205,7 +219,8 @@ async function readTar(
           let need = contentTake;
           while (need > 0) {
             const part = takePart(need);
-            if (pending.kind !== "skip") pending.buffer.set(part, pending.got);
+            if (pending.kind !== "skip")
+              pending.buffer.set(part, pending.got + BLOB_HEADER_RESERVE);
             pending.got += part.length;
             need -= part.length;
           }
@@ -217,8 +232,13 @@ async function readTar(
         const job = pending;
         pending = null;
         if (job.kind === "pax") {
-          for (const line of new TextDecoder()
-            .decode(job.buffer)
+          for (const line of textDecoder
+            .decode(
+              job.buffer.subarray(
+                BLOB_HEADER_RESERVE,
+                BLOB_HEADER_RESERVE + job.content,
+              ),
+            )
             .split("\n")) {
             const m = line.match(/^\d+ path=(.*)$/);
             if (m) paxPath = m[1];
@@ -243,7 +263,14 @@ async function readTar(
           full.includes("\r")
         )
           fail(400, "归档路径不安全");
-        await pushFile(full, job.mode, job.buffer);
+        await pushFile(
+          full,
+          job.mode,
+          job.buffer.subarray(
+            BLOB_HEADER_RESERVE,
+            BLOB_HEADER_RESERVE + job.content,
+          ),
+        );
         continue;
       }
       if (qlen < 512) return;
@@ -283,7 +310,7 @@ async function readTar(
         remaining: Math.ceil(size / 512) * 512,
         content: size,
         got: 0,
-        buffer: new Uint8Array(size),
+        buffer: new Uint8Array(size + BLOB_HEADER_RESERVE),
       };
     }
   };
@@ -298,9 +325,42 @@ async function readTar(
     await flushBatch();
   } catch (e) {
     if (e instanceof HTTPException) throw e;
-    fail(503, "解压 GitHub 归档失败");
+    console.error("GitHub archive parse failed", e);
+    fail(503, "解压 GitHub 归档失败：" + ((e as Error)?.message || "未知错误"));
   }
   return { count, skipped };
+}
+
+/**
+ * 用 GitHub 的树列表预先统计文件数：超限的仓库在下载归档之前就被拒绝，
+ * 不必等解析到一半才失败。接口不可用时返回 null，改由解析过程兜底。
+ */
+async function countBlobs(
+  owner: string,
+  name: string,
+  branch: string,
+): Promise<number | null> {
+  try {
+    const r = await fetch(
+      `https://api.github.com/repos/${owner}/${name}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+      {
+        headers: {
+          "user-agent": "zq-cfgit-sync",
+          accept: "application/vnd.github+json",
+        },
+      },
+    );
+    if (!r.ok) return null;
+    const info = (await r.json()) as {
+      tree?: { type?: string }[];
+      truncated?: boolean;
+    };
+    if (!Array.isArray(info.tree)) return null;
+    if (info.truncated) return Number.MAX_SAFE_INTEGER;
+    return info.tree.filter((e) => e.type === "blob").length;
+  } catch {
+    return null;
+  }
 }
 
 /** 下载并流式解析 GitHub 仓库快照，每累计一个批次调用一次 sink。 */
@@ -310,6 +370,12 @@ export async function streamGithubSnapshot(
 ): Promise<GithubSnapshotInfo> {
   const { owner, name } = parseSource(source);
   const wanted = await defaultBranch(owner, name);
+  const files = await countBlobs(owner, name, wanted);
+  if (files !== null && files > MAX_FILES)
+    fail(
+      413,
+      `仓库有 ${files === Number.MAX_SAFE_INTEGER ? "超过" + MAX_FILES : files} 个文件，超过单次同步上限 ${MAX_FILES} 个，请改用 git push 同步`,
+    );
   const candidates = [wanted, "main", "master"].filter(
     (b, i, a) => a.indexOf(b) === i,
   );

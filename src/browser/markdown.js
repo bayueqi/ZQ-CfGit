@@ -18,6 +18,24 @@ md.validateLink = (url) => {
   );
 };
 const escape = md.utils.escapeHtml;
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
+let activeEnv = null;
+function previewURL(path, env) {
+  return (
+    "/api/repos" +
+    env.base +
+    "/preview?" +
+    new URLSearchParams({ path, ref: env.ref || "HEAD" })
+  );
+}
+function viewURL(path, env, hash) {
+  return (
+    env.base +
+    "?" +
+    new URLSearchParams({ path, ref: env.ref || "HEAD", view: "blob" }) +
+    (hash ? "#md-" + hash.slice(1) : "")
+  );
+}
 function relativePath(href, env) {
   if (
     !env.base ||
@@ -54,17 +72,7 @@ md.renderer.rules.link_open = (tokens, i, options, env, self) => {
   else {
     const local = relativePath(href, env);
     if (local) {
-      token.attrSet(
-        "href",
-        env.base +
-          "?" +
-          new URLSearchParams({
-            path: local.path,
-            ref: env.ref || "HEAD",
-            view: "blob",
-          }) +
-          (local.hash ? "#md-" + local.hash.slice(1) : ""),
-      );
+      token.attrSet("href", viewURL(local.path, env, local.hash));
       token.attrSet("data-link", "");
     } else {
       token.attrSet("rel", "noopener noreferrer");
@@ -87,10 +95,30 @@ md.renderer.rules.image = (tokens, i, options, env, self) => {
       ? `<img loading="lazy" alt="${escape(alt)}" src="${escape(image)}">`
       : `<span class="markdown-image-link">${escape(alt || "图片")}（附件无法预览）</span>`;
   }
-  if (local && /\.(png|jpe?g|gif|webp)$/i.test(local.path))
-    return `<img loading="lazy" alt="${escape(alt)}" src="${escape("/api/repos" + env.base + "/preview?" + new URLSearchParams({ path: local.path, ref: env.ref || "HEAD" }))}">`;
+  if (local && IMAGE_EXT.test(local.path))
+    return `<img loading="lazy" alt="${escape(alt)}" src="${escape(previewURL(local.path, env))}">`;
   return `<span class="markdown-image-link">${escape(alt || "图片")}（<a target="_blank" rel="noopener noreferrer" href="${escape(md.validateLink(src) && !/^attachment:/i.test(src) ? src : "#")}">查看图片</a>）</span>`;
 };
+// 正文里直接写的 HTML（<img src="hello.gif">）不经过上面两条渲染规则，
+// 用净化钩子补上相对路径改写；以 / 开头的是规则已改写过的结果，跳过避免二次改写。
+DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  const env = activeEnv;
+  if (!env || !env.base) return;
+  const tag = node.nodeName;
+  if (tag !== "IMG" && tag !== "A") return;
+  const value = node.getAttribute(tag === "IMG" ? "src" : "href") || "";
+  if (!value || value.startsWith("/") || value.startsWith("#")) return;
+  if (tag === "A" && /^attachment:/i.test(value)) return;
+  const local = relativePath(value, env);
+  if (!local) return;
+  if (tag === "IMG") {
+    if (IMAGE_EXT.test(local.path))
+      node.setAttribute("src", previewURL(local.path, env));
+    return;
+  }
+  node.setAttribute("href", viewURL(local.path, env, local.hash));
+  node.setAttribute("data-link", "");
+});
 md.renderer.rules.heading_open = (tokens, i, options, env, self) => {
   const content = tokens[i + 1]?.content || "",
     id = content
@@ -130,5 +158,10 @@ md.core.ruler.after("inline", "tasks", (state) => {
 export function renderMarkdown(source, env = {}) {
   if (typeof source !== "string") return "";
   if (source.length > 200000) return "<pre>" + escape(source) + "</pre>";
-  return sanitize(md.render(source, env));
+  activeEnv = env;
+  try {
+    return sanitize(md.render(source, env));
+  } finally {
+    activeEnv = null;
+  }
 }

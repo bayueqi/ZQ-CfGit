@@ -67,7 +67,7 @@ export function applyDelta(base: Uint8Array, delta: Uint8Array) {
     baseSize = varint(delta, state),
     size = varint(delta, state);
   if (baseSize !== base.length) fail(400, "Delta base size mismatch");
-  if (size > LIMITS.object) fail(413, "Delta result exceeds 8 MiB");
+  if (size > LIMITS.object) fail(413, "Delta result exceeds 60 MiB");
   const out = new Uint8Array(size);
   let at = 0;
   while (state.pos < delta.length) {
@@ -142,7 +142,7 @@ export async function parsePack(
       size += (b & 127) * 2 ** shift;
       shift += 7;
     }
-    if (size > LIMITS.object) fail(413, "Pack object exceeds 8 MiB");
+    if (size > LIMITS.object) fail(413, "Pack object exceeds 60 MiB");
     if (!TYPES[type] && type !== 6 && type !== 7)
       fail(400, "Unsupported pack object type");
     let baseOffset: number | undefined, baseOid: string | undefined;
@@ -171,7 +171,7 @@ export async function parsePack(
       fail(400, "Pack object size mismatch");
     pos += inflated.consumed;
     total += size;
-    if (total > LIMITS.expanded) fail(413, "Pack expansion exceeds 32 MiB");
+    if (total > LIMITS.expanded) fail(413, "Pack expansion exceeds 64 MiB");
     const e: Entry = { offset, type, data: inflated.data, baseOffset, baseOid };
     if (TYPES[type]) {
       e.object = await makeObject(TYPES[type], e.data);
@@ -223,7 +223,7 @@ export async function parsePack(
       if (depth > LIMITS.depth) fail(400, "Delta chain exceeds 64");
       const data = applyDelta(base.data, e.data);
       total += data.length;
-      if (total > LIMITS.expanded) fail(413, "Resolved pack exceeds 32 MiB");
+      if (total > LIMITS.expanded) fail(413, "Resolved pack exceeds 64 MiB");
       e.object = await makeObject(base.type, data);
       e.depth = depth;
       byOid.set(e.object.oid, e.object);
