@@ -14,6 +14,7 @@ const paths = new Set([
   "/commit-detail",
   "/tags",
   "/file",
+  "/blame",
 ]);
 function readRoute(request: Request) {
   return (
@@ -24,6 +25,8 @@ function readRoute(request: Request) {
   );
 }
 export function snapshotRead(request: Request) {
+  // 逐行归属要重放整份文件历史，超出快照预算，固定走串行路径。
+  if (new URL(request.url).pathname === "/blame") return false;
   return readRoute(request) && request.headers.get("x-mutation") !== "1";
 }
 export function shareableOperation(request: Request) {
@@ -143,6 +146,8 @@ export async function repositoryRead(
       return Response.json(await repo.tree(ref, file));
     case "/blob":
       return Response.json(await repo.blob(ref, file));
+    case "/blame":
+      return Response.json(await repo.blame(ref, file));
     case "/commits":
       if (!repo.listBranches({ limit: 1 }).branches.length)
         return Response.json({

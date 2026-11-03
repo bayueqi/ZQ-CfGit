@@ -1145,17 +1145,6 @@ select:focus {
   min-width: 0;
 }
 
-.select-branch {
-  width: auto;
-  max-width: 200px;
-  height: 34px;
-  padding: 0 28px 0 10px;
-  background-position:
-    calc(100% - 14px) 15px,
-    calc(100% - 9px) 15px;
-  font-size: 13px;
-}
-
 .search {
   flex: 1;
   min-width: 180px;
@@ -1645,6 +1634,312 @@ select:focus {
 }
 
 /* ============================================================
+   文件工具条 / 分支选择 / 逐行归属
+   ============================================================ */
+.blob-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-3);
+}
+
+.seg-item {
+  padding: 4px 12px;
+  border-radius: 7px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.seg-item:hover {
+  color: var(--ink);
+}
+
+.seg-item.active {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: var(--shadow);
+}
+
+.blob-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.iconbtn:hover {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.iconbtn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ref-picker {
+  position: relative;
+}
+
+.ref-toggle svg:first-child {
+  width: 13px;
+  height: 13px;
+  opacity: 0.65;
+}
+
+.ref-toggle svg:last-child {
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+  opacity: 0.65;
+}
+
+.ref-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  width: 304px;
+  max-width: calc(100vw - 40px);
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.ref-menu[hidden] {
+  display: none;
+}
+
+.ref-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-left: 2px;
+}
+
+.ref-menu-head strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ref-search {
+  width: 100%;
+  height: 34px;
+  margin-bottom: 8px;
+}
+
+.ref-kinds {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ref-kind {
+  position: relative;
+  padding: 6px 10px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ref-kind.active {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.ref-kind.active::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.ref-list {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.ref-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font-size: 13px;
+  text-align: left;
+}
+
+.ref-item:hover {
+  background: var(--surface-3);
+}
+
+.ref-item.active {
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.ref-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ref-empty {
+  margin: 0;
+  padding: 10px 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.ref-foot {
+  margin-top: 6px;
+  padding: 8px 8px 2px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.ref-foot a {
+  color: var(--muted);
+}
+
+.ref-foot a:hover {
+  color: var(--accent);
+}
+
+.blame {
+  font: 12.5px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--surface);
+}
+
+.blame-block {
+  display: flex;
+  border-top: 1px solid var(--line-2);
+}
+
+.blame-block:first-child {
+  border-top: 0;
+}
+
+.blame-meta {
+  flex: 0 0 212px;
+  padding: 9px 12px;
+  border-right: 1px solid var(--line-2);
+  background: var(--surface-2);
+  font-family:
+    Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.blame-sha code {
+  color: var(--accent-ink);
+  font-size: 12px;
+}
+
+.blame-author {
+  display: block;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blame-date {
+  display: block;
+  color: var(--muted);
+}
+
+.blame-msg {
+  margin: 4px 0 0;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blame-lines {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 0;
+  overflow-x: auto;
+}
+
+.blame-line {
+  display: flex;
+  gap: 12px;
+  padding: 0 12px;
+}
+
+.blame-line:hover {
+  background: #fbfcfd;
+}
+
+.blame-no {
+  flex: 0 0 42px;
+  color: var(--muted-2);
+  text-align: right;
+  user-select: none;
+}
+
+.blame-line code {
+  padding: 0;
+  background: none;
+  color: #202834;
+  font: inherit;
+  white-space: pre;
+}
+
+/* ============================================================
    响应式
    ============================================================ */
 @media (max-width: 1240px) {
@@ -1813,6 +2108,20 @@ select:focus {
   .notebook-toolbar,
   .notebook-summary {
     padding: 12px;
+  }
+
+  .blob-bar {
+    padding: 8px 10px;
+  }
+
+  .blame-meta {
+    flex-basis: 116px;
+    padding: 8px;
+  }
+
+  .blame-author,
+  .blame-msg {
+    display: none;
   }
 }
 

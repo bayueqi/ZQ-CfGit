@@ -65,6 +65,7 @@
 | GET | `/api/repos/:ns/:repo/browse` | PAT | 仓库概览（默认分支、README） |
 | GET | `/api/repos/:ns/:repo/tree` | PAT | 文件树 |
 | GET | `/api/repos/:ns/:repo/blob` | PAT | 文件内容 |
+| GET | `/api/repos/:ns/:repo/blame` | PAT | 逐行归属，参数 `ref`、`path` |
 | GET | `/api/repos/:ns/:repo/file` | PAT | 文件内容，支持 HEAD 与范围请求 |
 | GET | `/api/repos/:ns/:repo/commits` | PAT | 提交历史 |
 | GET | `/api/repos/:ns/:repo/branches` | PAT | 分支列表 |

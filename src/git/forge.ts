@@ -1,5 +1,5 @@
 import { literalPatch } from "./binary-patch";
-import { diffLines, createTwoFilesPatch } from "diff";
+import { diffArrays, diffLines, createTwoFilesPatch } from "diff";
 import { GitRepository } from "./repository";
 import {
   TreeEntry,
@@ -27,6 +27,11 @@ export interface SignatureIdentity {
   email: string;
   timestamp?: number;
 }
+const BLAME_LIMITS = {
+  commits: 120,
+  lines: 4000,
+  bytes: 512 * 1024,
+};
 export class ForgeRepository extends GitRepository {
   peer?: (ephemeral: boolean) => ForgeRepository;
   async revision(ref = "HEAD"): Promise<string> {
@@ -565,6 +570,114 @@ export class ForgeRepository extends GitRepository {
       patch,
       files: result,
       stats: { files: result.length, additions: added, deletions: removed },
+    };
+  }
+  /** 逐行归属：按文件历史从旧到新重放，未改动的行沿用上一版所属的提交。 */
+  async blame(ref: string, path: string) {
+    const head = await this.revision(ref);
+    this.path(path);
+    const blobAt = new Map<string, string | null>(),
+      blobOf = async (sha: string) => {
+        const known = blobAt.get(sha);
+        if (known !== undefined) return known;
+        const entry = await this.maybeEntry(sha, path),
+          value = entry?.type === "blob" ? entry.sha : null;
+        blobAt.set(sha, value);
+        return value;
+      };
+    const touching: {
+        sha: string;
+        blob: string;
+        date: string;
+        author: string;
+        message: string;
+      }[] = [],
+      seen = new Set<string>(),
+      pending = [head];
+    let truncated = false;
+    while (pending.length) {
+      if (seen.size >= BLAME_LIMITS.commits) {
+        truncated = true;
+        break;
+      }
+      const id = pending.shift()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const commit = parseCommit(await this.store.get(id)),
+        own = await blobOf(id);
+      pending.push(...commit.parents);
+      if (!own) continue;
+      let carried = false;
+      for (const parent of commit.parents)
+        if ((await blobOf(parent)) === own) {
+          carried = true;
+          break;
+        }
+      if (carried) continue;
+      const who = parseIdentity(commit.author);
+      touching.push({
+        sha: id,
+        blob: own,
+        date: who.date,
+        author: who.name,
+        message: commit.message.split("\n")[0],
+      });
+    }
+    if (!touching.length) fail(404, "File not found");
+    touching.sort(
+      (a, b) => a.date.localeCompare(b.date) || a.sha.localeCompare(b.sha),
+    );
+    let lines: string[] = [],
+      marks: string[] = [];
+    for (let i = 0; i < touching.length; i++) {
+      const data = (await this.store.get(touching[i].blob)).data;
+      if (data.includes(0))
+        return { ref: head, path, binary: true, lines: [], commits: {} };
+      if (data.length > BLAME_LIMITS.bytes) fail(413, "File too large to blame");
+      const next = data.length ? text(data).replace(/\n$/, "").split("\n") : [];
+      if (next.length > BLAME_LIMITS.lines)
+        fail(413, "File too large to blame");
+      if (!i) {
+        lines = next;
+        marks = next.map(() => touching[0].sha);
+        continue;
+      }
+      const nextMarks: string[] = [];
+      let at = 0,
+        index = 0;
+      for (const part of diffArrays(lines, next)) {
+        if (part.added)
+          for (let k = 0; k < part.value.length; k++)
+            nextMarks[index++] = touching[i].sha;
+        else if (part.removed) at += part.value.length;
+        else
+          for (let k = 0; k < part.value.length; k++)
+            nextMarks[index++] = marks[at++];
+      }
+      lines = next;
+      marks = nextMarks;
+    }
+    const commits: Record<
+      string,
+      { author: string; date: string; message: string }
+    > = {};
+    for (const entry of touching)
+      commits[entry.sha] = {
+        author: entry.author,
+        date: entry.date,
+        message: entry.message,
+      };
+    return {
+      ref: head,
+      path,
+      binary: false,
+      truncated,
+      lines: lines.map((value, i) => ({
+        n: i + 1,
+        sha: marks[i] || touching[touching.length - 1].sha,
+        text: value,
+      })),
+      commits,
     };
   }
 }

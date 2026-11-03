@@ -5,7 +5,7 @@ import {
   errorText,
   relativeTime,
 } from "./i18n.js?v=8502f51a9d3cb3ce";
-import { forgePage } from "./forge.js?v=c09916dffa2c3882";
+import { forgePage } from "./forge.js?v=82174bb10a6360e7";
 const root = document.querySelector("#app");
 const esc = (x) =>
   String(x ?? "").replace(
@@ -24,6 +24,11 @@ const icons = {
   branch: "M6 3v12a4 4 0 0 0 8 0V9 M3 3h6 M11 6h6v3h-6z",
   search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16 M21 21l-4.3-4.3",
   link: "M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1 M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1",
+  copy: "M8 8h11a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3",
+  download: "M12 3v12 M7 11l5 5 5-5 M4 20h16",
+  edit: "M4 20h4L20 8l-4-4L4 16z M14 6l4 4",
+  chevron: "M6 9l6 6 6-6",
+  close: "M6 6l12 12 M18 6L6 18",
 };
 const icon = (name) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${icons[name] || icons.repo}"/></svg>`;
@@ -376,6 +381,145 @@ function copyButton(value, id = "copy") {
   });
 }
 const writeable = (r) => !r.archived_at && r.role === "owner";
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob),
+    a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+const safeName = (value) => String(value).replace(/[\\/:*?"<>|\s]+/g, "-");
+function refPickerHTML(base, branches, ref) {
+  return i18nHTML`<div class="ref-picker"><button type="button" class="btn small ref-toggle" id="ref-toggle" aria-haspopup="true" aria-expanded="false">${icon("branch")}<span>${esc(ref)}</span>${icon("chevron")}</button><div class="ref-menu" id="ref-menu" hidden><div class="ref-menu-head"><strong>${i18nText("切换分支 / 标签")}</strong><button type="button" class="iconbtn" id="ref-close" aria-label="${i18nText("关闭")}">${icon("close")}</button></div><input class="ref-search" id="ref-search" type="text" placeholder="${i18nText("查找分支或标签…")}" autocomplete="off"><div class="ref-kinds"><button type="button" class="ref-kind active" data-kind="branches">${i18nText("分支")}</button><button type="button" class="ref-kind" data-kind="tags">${i18nText("标签")}</button></div><div class="ref-list" id="ref-list"></div><div class="ref-foot">${link(base + "/forge", i18nText("查看全部分支"))}</div></div></div>`;
+}
+function bindRefPicker(ap, base, branches, ref, defaultBranch, version) {
+  const toggle = document.querySelector("#ref-toggle"),
+    menu = document.querySelector("#ref-menu"),
+    list = document.querySelector("#ref-list"),
+    search = document.querySelector("#ref-search");
+  if (!toggle || !menu || !list || !search) return;
+  const state = { kind: "branches", tags: null, query: "", pending: ref };
+  const target = () => {
+    const params = new URLSearchParams(location.search),
+      next = new URLSearchParams({ ref: state.pending });
+    if (params.get("path")) next.set("path", params.get("path"));
+    if (params.get("view") === "blob") next.set("view", "blob");
+    return base + "?" + next;
+  };
+  const draw = () => {
+    const source =
+        state.kind === "branches" ? branches : state.tags || [],
+      query = state.query.trim().toLowerCase(),
+      items = source.filter(
+        (item) => !query || item.name.toLowerCase().includes(query),
+      );
+    if (state.kind === "tags" && !state.tags) {
+      list.innerHTML = `<p class="ref-empty">${i18nText("正在读取标签…")}</p>`;
+      return;
+    }
+    list.innerHTML = items.length
+      ? items
+          .map(
+            (item) =>
+              `<button type="button" class="ref-item${item.name === ref ? " active" : ""}" data-ref="${esc(item.name)}"><span class="ref-name">${esc(item.name)}</span>${
+                state.kind === "branches" && item.name === defaultBranch
+                  ? '<span class="pill">default</span>'
+                  : ""
+              }</button>`,
+          )
+          .join("")
+      : `<p class="ref-empty">${i18nText("没有匹配的分支或标签。")}</p>`;
+    for (const button of list.querySelectorAll("[data-ref]"))
+      button.onclick = () => {
+        state.pending = button.dataset.ref;
+        close();
+        go(target());
+      };
+  };
+  const loadTags = async () => {
+    if (state.tags) return;
+    try {
+      const result = await api(ap + "/tags");
+      if (version !== routeVersion) return;
+      state.tags = result.tags || [];
+      draw();
+    } catch (e) {
+      if (version !== routeVersion) return;
+      list.innerHTML = `<p class="ref-empty">${esc(e.message)}</p>`;
+    }
+  };
+  const open = () => {
+    menu.hidden = false;
+    toggle.setAttribute("aria-expanded", "true");
+    draw();
+    search.focus();
+    search.select();
+  };
+  const close = () => {
+    menu.hidden = true;
+    toggle.setAttribute("aria-expanded", "false");
+  };
+  toggle.onclick = () => (menu.hidden ? open() : close());
+  document.querySelector("#ref-close").onclick = close;
+  search.oninput = () => {
+    state.query = search.value;
+    draw();
+  };
+  for (const button of menu.querySelectorAll("[data-kind]"))
+    button.onclick = () => {
+      for (const other of menu.querySelectorAll("[data-kind]"))
+        other.classList.toggle("active", other === button);
+      state.kind = button.dataset.kind;
+      if (state.kind === "tags") void loadTags();
+      draw();
+    };
+  const outside = (event) => {
+    if (!menu.isConnected) {
+      document.removeEventListener("mousedown", outside);
+      return;
+    }
+    if (!menu.contains(event.target) && !toggle.contains(event.target)) close();
+  };
+  document.addEventListener("mousedown", outside);
+  menu.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") close();
+  });
+}
+async function renderBlame(host, ap, base, ref, path, version) {
+  let data;
+  try {
+    data = await api(
+      `${ap}/blame?ref=${encodeURIComponent(ref)}&path=${encodeURIComponent(path)}`,
+    );
+  } catch (e) {
+    if (version !== routeVersion || !host.isConnected) return;
+    host.innerHTML = `<div class="empty"><p>${esc(e.message)}</p></div>`;
+    return;
+  }
+  if (version !== routeVersion || !host.isConnected) return;
+  if (data.binary) {
+    host.innerHTML = `<div class="empty"><p>${i18nText("二进制文件没有逐行归属。")}</p></div>`;
+    return;
+  }
+  const groups = [];
+  for (const line of data.lines) {
+    const last = groups.at(-1);
+    if (last && last.sha === line.sha) last.lines.push(line);
+    else groups.push({ sha: line.sha, lines: [line] });
+  }
+  host.innerHTML = groups
+    .map((group) => {
+      const meta = data.commits[group.sha] || {};
+      return `<div class="blame-block"><div class="blame-meta">${link(`${base}/commits/${group.sha}`, `<code>${esc(group.sha.slice(0, 7))}</code>`, "blame-sha")}<span class="blame-author">${esc(meta.author || "")}</span><time class="blame-date">${meta.date ? date(meta.date) : ""}</time><p class="blame-msg">${esc(meta.message || "")}</p></div><div class="blame-lines">${group.lines
+        .map(
+          (line) =>
+            `<div class="blame-line"><span class="blame-no">${line.n}</span><code>${esc(line.text)}</code></div>`,
+        )
+        .join("")}</div></div>`;
+    })
+    .join("");
+}
 async function codePage(r, base, ap, version) {
   const params = new URLSearchParams(location.search),
     p = params.get("path") || "",
@@ -389,7 +533,10 @@ async function codePage(r, base, ap, version) {
   const ref = params.get("ref") || default_branch;
   r = { ...r, default_branch };
   if (version !== routeVersion) return;
-  const clone = i18nHTML`<button class="btn" id="copy">克隆地址 ↗</button>`;
+  const archiveButton = branches.length
+    ? `<button type="button" class="btn" id="download-archive">${icon("download")}<span>${i18nText("下载代码")}</span></button>`
+    : "";
+  const clone = `<div class="actionbar"><button class="btn" id="copy">${i18nText("克隆地址")} ↗</button>${archiveButton}</div>`;
   const aside = i18nHTML`<aside class="aside"><section><h3>关于项目</h3><p class="muted">${esc(r.description || i18nText("暂无描述"))}</p></section><section><h3>使用 Git 克隆</h3><code>${esc(r.clone_url)}</code><p class="muted">HTTPS 凭证：用户名 + 访问令牌</p>${link("/settings/tokens", i18nText("管理访问令牌 →"))}</section><section><h3>仓库详情</h3><p class="muted">${branches.length} 个分支<br>默认分支 ${esc(r.default_branch)}<br>创建于 ${date(r.created_at)}</p></section></aside>`;
   if (!branches.length) {
     repoLayout(
@@ -409,21 +556,76 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
     ? `<section class="panel readme"><div class="panelhead"><strong>README.md</strong></div><div class="markdown detail-body" data-markdown data-base="${esc(base)}" data-ref="${esc(data.ref)}" data-file="README.md">${esc(readmeFile.content)}</div></section>`
     : "";
   if (version !== routeVersion) return;
-  const nav = i18nHTML`<div class="toolbar"><div class="actionbar"><select class="select-branch" id="branch" aria-label="选择分支">${!branches.some((b) => b.name === ref) ? i18nHTML`<option selected value="${esc(ref)}">提交 ${esc(ref.slice(0, 12))}</option>` : ""}${branches.map((b) => `<option ${b.name === ref ? "selected" : ""} value="${esc(b.name)}">⑂ ${esc(b.name)}</option>`).join("")}</select><span class="muted">${esc(p || "/")}</span></div>${writeable(r) ? link(`${base}/edit?ref=${encodeURIComponent(ref)}${blob ? "&path=" + encodeURIComponent(p) : ""}`, blob ? i18nText("编辑文件") : i18nText("新建文件"), "btn small") : ""}</div>`;
+  const nav = `<div class="toolbar"><div class="actionbar">${refPickerHTML(base, branches, ref)}<span class="muted">${esc(p || "/")}</span></div>${!blob && writeable(r) ? link(`${base}/edit?ref=${encodeURIComponent(ref)}`, i18nText("新建文件"), "btn small") : ""}</div>`;
   const up = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
-  const list = blob
-    ? `<div class="panelhead">${esc(p)}<span class="muted">${data.size} bytes</span></div>${/\.(png|jpe?g|gif|webp)$/i.test(p) ? i18nHTML`<div class="image-preview"><img id="blob-preview" alt="${esc(p)}" src="${esc("/api" + ap + "/preview?" + new URLSearchParams({ ref: data.ref, path: p }))}"><p class="muted" id="preview-caption">图片预览 · ${esc(p)}</p></div>` : data.binary ? i18nText('<div class="empty"><p>二进制文件，请通过 Git 下载。</p></div>') : /\.ipynb$/i.test(p) ? i18nText('<div id="notebook-preview"><p class="muted detail-body">正在加载笔记本预览…</p></div>') : /\.md$/i.test(p) ? i18nHTML`<div class="markdown detail-body" data-markdown data-base="${esc(base)}" data-ref="${esc(data.ref)}" data-file="${esc(p)}">${esc(data.content)}</div><details><summary>查看源码</summary>${codeViewer(data.content, p)}</details>` : codeViewer(data.content, p)}`
-    : `<div class="panelhead"><span>${link(base + "?ref=" + encodeURIComponent(ref), esc(r.name))}${p ? " / " + esc(p) : ""}</span><code>${esc(data.ref.slice(0, 8))}</code></div>${p ? `<div class="file-row">${link(`${base}?ref=${encodeURIComponent(ref)}&path=${encodeURIComponent(up)}`, i18nText("← 上一级"))}<span></span></div>` : ""}${data.entries
-        .sort(
-          (a, b) =>
-            (a.type === b.type ? 0 : a.type === "tree" ? -1 : 1) ||
-            a.name.localeCompare(b.name),
-        )
-        .map(
-          (f) =>
-            `<div class="file-row">${link(`${base}?ref=${encodeURIComponent(ref)}&path=${encodeURIComponent((p ? p + "/" : "") + f.name)}${f.type === "tree" ? "" : "&view=blob"}`, icon(f.type === "tree" ? "folder" : "file") + esc(f.name))}<span class="file-meta"><code class="muted">${f.sha.slice(0, 8)}</code><time class="file-updated muted" data-file-updated="${esc(f.name)}" title="${esc(i18nText("正在读取更新时间"))}">…</time></span></div>`,
-        )
-        .join("")}`;
+  let list;
+  if (blob) {
+    const markdown = /\.md$/i.test(p),
+      notebookFile = /\.ipynb$/i.test(p),
+      image = /\.(png|jpe?g|gif|webp)$/i.test(p),
+      readable = !data.binary,
+      wanted = params.get("tab"),
+      tab = !readable
+        ? "code"
+        : wanted === "blame"
+          ? "blame"
+          : (markdown || notebookFile) && wanted !== "code"
+            ? "preview"
+            : "code",
+      blobHref = (value) =>
+        `${base}?view=blob&path=${encodeURIComponent(p)}&ref=${encodeURIComponent(ref)}&tab=${value}`,
+      tabs = readable
+        ? `<div class="seg" role="tablist">${(markdown || notebookFile
+            ? [["preview", i18nText("预览")]]
+            : []
+          )
+            .concat([
+              ["code", i18nText("代码")],
+              ["blame", "Blame"],
+            ])
+            .map(([key, label]) =>
+              link(blobHref(key), label, `seg-item${tab === key ? " active" : ""}`),
+            )
+            .join("")}</div>`
+        : "",
+      actions = `<div class="blob-actions">${
+        readable
+          ? `<button type="button" class="iconbtn" id="blob-copy" title="${i18nText("复制内容")}" aria-label="${i18nText("复制内容")}">${icon("copy")}</button>`
+          : ""
+      }<button type="button" class="iconbtn" id="blob-download" title="${i18nText("下载文件")}" aria-label="${i18nText("下载文件")}">${icon("download")}</button>${
+        writeable(r)
+          ? link(
+              `${base}/edit?ref=${encodeURIComponent(ref)}&path=${encodeURIComponent(p)}`,
+              icon("edit"),
+              "iconbtn",
+            )
+          : ""
+      }</div>`,
+      body =
+        tab === "blame"
+          ? `<div id="blame" class="blame"><div class="empty"><p>${i18nText("正在读取逐行归属…")}</p></div></div>`
+          : tab === "preview"
+            ? notebookFile
+              ? `<div id="notebook-preview"><p class="muted detail-body">${i18nText("正在加载笔记本预览…")}</p></div>`
+              : `<div class="markdown detail-body" data-markdown data-base="${esc(base)}" data-ref="${esc(data.ref)}" data-file="${esc(p)}">${esc(data.content)}</div>`
+            : image
+              ? `<div class="image-preview"><img id="blob-preview" alt="${esc(p)}" src="${esc("/api" + ap + "/preview?" + new URLSearchParams({ ref: data.ref, path: p }))}"><p class="muted" id="preview-caption">${i18nText("图片预览")} · ${esc(p)}</p></div>`
+              : data.binary
+                ? `<div class="empty"><p>${i18nText("二进制文件，请通过 Git 下载。")}</p></div>`
+                : codeViewer(data.content, p);
+    list = `<div class="blob-bar">${tabs}${actions}</div><div class="panelhead"><strong>${esc(p)}</strong><span class="muted">${data.size} bytes</span></div>${body}`;
+  } else
+    list = `<div class="panelhead"><span>${link(base + "?ref=" + encodeURIComponent(ref), esc(r.name))}${p ? " / " + esc(p) : ""}</span><code>${esc(data.ref.slice(0, 8))}</code></div>${p ? `<div class="file-row">${link(`${base}?ref=${encodeURIComponent(ref)}&path=${encodeURIComponent(up)}`, i18nText("← 上一级"))}<span></span></div>` : ""}${data.entries
+      .sort(
+        (a, b) =>
+          (a.type === b.type ? 0 : a.type === "tree" ? -1 : 1) ||
+          a.name.localeCompare(b.name),
+      )
+      .map(
+        (f) =>
+          `<div class="file-row">${link(`${base}?ref=${encodeURIComponent(ref)}&path=${encodeURIComponent((p ? p + "/" : "") + f.name)}${f.type === "tree" ? "" : "&view=blob"}`, icon(f.type === "tree" ? "folder" : "file") + esc(f.name))}<span class="file-meta"><code class="muted">${f.sha.slice(0, 8)}</code><time class="file-updated muted" data-file-updated="${esc(f.name)}" title="${esc(i18nText("正在读取更新时间"))}">…</time></span></div>`,
+      )
+      .join("")}`;
   repoLayout(
     r,
     "code",
@@ -458,6 +660,70 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
     if (preview.complete && !preview.naturalWidth) failed();
   }
   copyButton(r.clone_url);
+  bindRefPicker(ap, base, branches, ref, r.default_branch, version);
+  const archive = document.querySelector("#download-archive");
+  if (archive)
+    archive.onclick = async () => {
+      const label = archive.innerHTML;
+      archive.disabled = true;
+      archive.textContent = i18nText("正在打包…");
+      try {
+        const response = await fetch("/api" + ap + "/archive", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ref: data.ref,
+            archive: { prefix: `${safeName(r.name)}-${safeName(ref)}/` },
+          }),
+        });
+        if (!response.ok)
+          throw new Error(
+            i18nText("下载失败") + "（HTTP " + response.status + "）",
+          );
+        saveBlob(
+          await response.blob(),
+          `${safeName(r.name)}-${safeName(ref)}.tar.gz`,
+        );
+      } catch (e) {
+        if (e.name !== "AbortError") notice(e.message);
+      } finally {
+        if (archive.isConnected) {
+          archive.disabled = false;
+          archive.innerHTML = label;
+        }
+      }
+    };
+  const copyBlob = document.querySelector("#blob-copy");
+  if (copyBlob)
+    copyBlob.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(data.content ?? "");
+        notice(i18nText("已复制到剪贴板"));
+      } catch {
+        notice(i18nText("无法访问剪贴板，请手动复制。"));
+      }
+    };
+  const downloadBlob = document.querySelector("#blob-download");
+  if (downloadBlob)
+    downloadBlob.onclick = async () => {
+      try {
+        const response = await fetch(
+          "/api" +
+            ap +
+            "/file?" +
+            new URLSearchParams({ ref: data.ref, path: p }),
+        );
+        if (!response.ok)
+          throw new Error(
+            i18nText("下载失败") + "（HTTP " + response.status + "）",
+          );
+        saveBlob(await response.blob(), p.split("/").at(-1));
+      } catch (e) {
+        notice(e.message);
+      }
+    };
+  const blame = document.querySelector("#blame");
+  if (blame) void renderBlame(blame, ap, base, ref, p, version);
   applyHighlight().catch(() => {});
   if (/^#L[1-9][0-9]*$/.test(location.hash)) {
     const line = document.getElementById(location.hash.slice(1));
@@ -465,8 +731,6 @@ git push -u origin ${esc(r.default_branch)}</pre></div>${aside}</div>`,
     if (details) details.open = true;
     line?.scrollIntoView({ block: "center" });
   }
-  document.querySelector("#branch").onchange = (e) =>
-    go(`${base}?ref=${encodeURIComponent(e.target.value)}`);
 }
 async function loadFileUpdates(ap, sha, path, version) {
   const url = `${ap}/tree-updates?ref=${encodeURIComponent(sha)}&path=${encodeURIComponent(path)}`;

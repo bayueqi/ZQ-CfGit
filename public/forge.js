@@ -13,7 +13,7 @@ export async function forgePage(r, base, ap, h) {
   repoLayout(
     r,
     "forge",
-    i18nHTML`<div class="forge-grid"><section class="panel"><div class="panelhead"><strong>分支 · ${branches.branches.length}</strong></div>${branches.branches.map((b) => `<div class="token-row"><div><strong>${esc(b.name)}</strong><p><code>${esc(b.sha.slice(0, 12))}</code></p></div>${write ? i18nHTML`<button class="btn small danger" data-branch="${esc(b.name)}" data-sha="${esc(b.sha)}">删除</button>` : ""}</div>`).join("")}${write ? i18nHTML`<form id="create-branch" class="form">${field(i18nText("新分支"), "target_branch")}${field(i18nText("起点分支、标签或 SHA"), "base_ref", "text", r.default_branch)}<button class="btn primary" type="submit">创建分支</button></form>` : ""}</section><section class="panel"><div class="panelhead"><strong>标签 · ${tags.tags.length}</strong></div>${tags.tags.map((t) => `<div class="token-row"><strong>${esc(t.name)}</strong><code>${esc(t.sha.slice(0, 12))}</code>${write ? i18nHTML`<button class="btn small danger" data-tag="${esc(t.name)}">删除</button>` : ""}</div>`).join("")}${write ? i18nHTML`<form id="create-tag" class="form">${field(i18nText("标签名"), "tag-name")}${field(i18nText("起点"), "tag-ref", "text", r.default_branch)}<button class="btn primary" type="submit">创建标签</button></form>` : ""}</section></div><section class="panel"><form id="download" class="form"><h2>文件与归档</h2>${field(i18nText("版本"), "ref", "text", r.default_branch)}<div class="field"><label>文件路径（留空下载归档）</label><input name="path"></div><button class="btn" type="submit">下载</button></form></section>`,
+    i18nHTML`<div class="forge-grid"><section class="panel"><div class="panelhead"><strong>分支 · ${branches.branches.length}</strong></div>${branches.branches.map((b) => `<div class="token-row"><div><strong>${esc(b.name)}</strong><p><code>${esc(b.sha.slice(0, 12))}</code></p></div>${write ? i18nHTML`<button class="btn small danger" data-branch="${esc(b.name)}" data-sha="${esc(b.sha)}">删除</button>` : ""}</div>`).join("")}${write ? i18nHTML`<form id="create-branch" class="form">${field(i18nText("新分支"), "target_branch")}${field(i18nText("起点分支、标签或 SHA"), "base_ref", "text", r.default_branch)}<button class="btn primary" type="submit">创建分支</button></form>` : ""}</section><section class="panel"><div class="panelhead"><strong>标签 · ${tags.tags.length}</strong></div>${tags.tags.map((t) => `<div class="token-row"><strong>${esc(t.name)}</strong><code>${esc(t.sha.slice(0, 12))}</code>${write ? i18nHTML`<button class="btn small danger" data-tag="${esc(t.name)}">删除</button>` : ""}</div>`).join("")}${write ? i18nHTML`<form id="create-tag" class="form">${field(i18nText("标签名"), "tag-name")}${field(i18nText("起点"), "tag-ref", "text", r.default_branch)}<button class="btn primary" type="submit">创建标签</button></form>` : ""}</section></div>`,
   );
   const refresh = () => go(base + "/forge");
   if (write) {
@@ -56,27 +56,4 @@ export async function forgePage(r, base, ap, h) {
         }
       };
   }
-  bindForm("#download", async (d) => {
-    const response = await fetch(
-      "/api" +
-        ap +
-        (d.path
-          ? "/file?" + new URLSearchParams({ ref: d.ref, path: d.path })
-          : "/archive"),
-      d.path
-        ? {}
-        : {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ref: d.ref }),
-          },
-    );
-    if (!response.ok) throw Error((await response.json()).error);
-    const url = URL.createObjectURL(await response.blob()),
-      a = document.createElement("a");
-    a.href = url;
-    a.download = d.path?.split("/").at(-1) || r.name + ".tar.gz";
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  });
 }

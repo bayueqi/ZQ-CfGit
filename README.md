@@ -151,6 +151,7 @@ git push origin main
 | GET | `/api/repos/:ns/:repo/browse` | 仓库概览（默认分支、README 等） |
 | GET | `/api/repos/:ns/:repo/tree` | 文件树 |
 | GET | `/api/repos/:ns/:repo/blob` | 文件内容 |
+| GET | `/api/repos/:ns/:repo/blame` | 逐行归属，参数 `ref`、`path` |
 | GET | `/api/repos/:ns/:repo/file` | 文件内容（支持 HEAD 与范围请求） |
 | GET | `/api/repos/:ns/:repo/commits` | 提交历史 |
 | GET | `/api/repos/:ns/:repo/branches` | 分支列表 |

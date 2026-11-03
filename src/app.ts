@@ -805,6 +805,7 @@ for (const operation of [
   "branches",
   "tree",
   "blob",
+  "blame",
   "commits",
   "search",
 ])
