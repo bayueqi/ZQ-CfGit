@@ -1659,6 +1659,7 @@ select:focus {
 
 .seg-item {
   padding: 4px 12px;
+  border: 1px solid transparent;
   border-radius: 7px;
   font-size: 13px;
   line-height: 1.5;
