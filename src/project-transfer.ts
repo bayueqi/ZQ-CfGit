@@ -18,11 +18,10 @@ export async function renameProject(
         ) THEN 1 ELSE 0 END`,
       ).bind(guard, actor, repo.id, revision),
       env.DB.prepare(
-        `DELETE FROM repository_aliases WHERE namespace=? AND name=? AND (repo_id=? OR repo_id NOT IN (
-        SELECT id FROM repositories WHERE deleted_at IS NULL))`,
-      ).bind(repo.namespace, name, repo.id),
+        "DELETE FROM repository_aliases WHERE namespace=? AND name=?",
+      ).bind(repo.namespace, name),
       env.DB.prepare(
-        "INSERT INTO repository_aliases(namespace,name,repo_id) SELECT namespace,name,id FROM repositories WHERE id=?",
+        "INSERT OR REPLACE INTO repository_aliases(namespace,name,repo_id) SELECT namespace,name,id FROM repositories WHERE id=?",
       ).bind(repo.id),
       env.DB.prepare(
         "UPDATE repositories SET name=?,lifecycle_revision=lifecycle_revision+1 WHERE id=?",
