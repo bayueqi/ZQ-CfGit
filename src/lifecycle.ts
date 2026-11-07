@@ -31,11 +31,12 @@ export async function lifecycle(
     // A durable tombstone rejects already-authorized in-flight requests too.
     await storage.put("deleted", id);
     await storage.setAlarm(Date.now() + 60000);
-    await env.DB.prepare(
-      "UPDATE repositories SET deleted_at=datetime('now'),name=? WHERE id=?",
-    )
-      .bind("deleted_" + id, id)
-      .run();
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE repositories SET deleted_at=datetime('now'),name=? WHERE id=?",
+      ).bind("deleted_" + id, id),
+      env.DB.prepare("DELETE FROM repository_aliases WHERE repo_id=?").bind(id),
+    ]);
     return Response.json({ deleted: true, cleanup: "scheduled" });
   }
   if (await storage.get("deleted")) fail(404, "Repository deleted");
@@ -87,11 +88,12 @@ export async function collectDeleted(env: Env, storage: DurableObjectStorage) {
   const id = await storage.get<string>("deleted");
   if (!id) return;
   // Retry the metadata retirement if the original D1 update was interrupted.
-  await env.DB.prepare(
-    "UPDATE repositories SET deleted_at=COALESCE(deleted_at,datetime('now')),name=? WHERE id=?",
-  )
-    .bind("deleted_" + id, id)
-    .run();
+  await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE repositories SET deleted_at=COALESCE(deleted_at,datetime('now')),name=? WHERE id=?",
+    ).bind("deleted_" + id, id),
+    env.DB.prepare("DELETE FROM repository_aliases WHERE repo_id=?").bind(id),
+  ]);
   for (const prefix of [`repos/${id}/`, `lfs/${id}/`]) {
     const page = await env.OBJECTS.list({ prefix, limit: 100 });
     if (page.objects.length) {
